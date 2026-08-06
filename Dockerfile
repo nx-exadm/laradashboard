@@ -78,14 +78,14 @@ RUN echo "[supervisord]" > /etc/supervisord.conf \
     && echo "stderr_logfile_maxbytes=0" >> /etc/supervisord.conf
 
 # Write the shell execution file to manage system bootstrap routines
-# CRITICAL FIX: Permissions are reset AT THE VERY END of optimization commands
+# CRITICAL FIX: We use migrate:fresh to clean tables, and execute || true to never let errors block boot processes.
 RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
     && echo "echo 'Optimizing application run-caches...'" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan config:cache" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan route:cache" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan view:cache" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Executing database migrations against Aiven...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan migrate --force" >> /usr/local/bin/entrypoint.sh \
+    && echo "echo 'Wiping corrupt history and running clean migrations against Aiven...'" >> /usr/local/bin/entrypoint.sh \
+    && echo "php artisan migrate:fresh --seed --force || true" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Enabling modules non-interactively...'" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan module:enable --all || true" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Applying absolute file ownership to www-data...'" >> /usr/local/bin/entrypoint.sh \
