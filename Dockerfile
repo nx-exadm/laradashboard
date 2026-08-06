@@ -30,7 +30,7 @@ COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr
 
 # Install all extensions dynamically without manually juggling header paths
 RUN chmod +x /usr/local/bin/install-php-extensions && \
-    install-php-extensions pdo_mysql pdo_pgsql gd zip bcmath opcache
+    install-php-extensions pdo_mysql pdo_pgsql gd zip bcmath opcache mbstring openssl tokenizer xml ctype json fileinfo curl
 
 # Configure optimal production caching rules inside PHP
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
@@ -83,9 +83,12 @@ RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
     && echo "php artisan config:clear" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan route:clear" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan view:clear" >> /usr/local/bin/entrypoint.sh \
+    && echo "echo 'Ensuring writable environment configuration file exists...'" >> /usr/local/bin/entrypoint.sh \
+    && echo "touch /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Applying absolute file ownership to www-data...'" >> /usr/local/bin/entrypoint.sh \
     && echo "chown -R www-data:www-data /var/www/html" >> /usr/local/bin/entrypoint.sh \
     && echo "chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache" >> /usr/local/bin/entrypoint.sh \
+    && echo "chmod 664 /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Launching process manager stack...'" >> /usr/local/bin/entrypoint.sh \
     && echo "exec /usr/bin/supervisord -c /etc/supervisord.conf" >> /usr/local/bin/entrypoint.sh \
     && chmod +x /usr/local/bin/entrypoint.sh
