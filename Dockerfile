@@ -77,11 +77,8 @@ RUN echo "[supervisord]" > /etc/supervisord.conf \
     && echo "stderr_logfile=/dev/stderr" >> /etc/supervisord.conf \
     && echo "stderr_logfile_maxbytes=0" >> /etc/supervisord.conf
 
-# Write the shell execution file to manage system bootstrap routines
-# CRITICAL COMPILER REPAIR: Dynamically injects an HTTPS enforcement scheme directly into the Laravel boot system code.
+# Write the shell execution file to manage system bootstrap routines cleanly
 RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Injecting SSL protocol configurations...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "sed -i \"/public function boot/a \\\ \ \ \ \ \ \\\Illuminate\\\Support\\\Facades\\\URL::forceScheme('https');\" /var/www/html/app/Providers/AppServiceProvider.php" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Optimizing application run-caches...'" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan config:clear" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan route:clear" >> /usr/local/bin/entrypoint.sh \
