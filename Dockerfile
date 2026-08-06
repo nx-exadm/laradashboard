@@ -25,8 +25,8 @@ FROM php:8.3-fpm-alpine
 # Install core production services
 RUN apk add --no-cache nginx supervisor bash postgresql-client mariadb-client
 
-# Grab the official, rock-solid automated PHP extension installer utility
-ADD https://github.com /usr/local/bin/
+# Pull the official installer utility directly from its Docker Hub image (Fixes the URL issue)
+COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
 # Install all extensions dynamically without manually juggling header paths
 RUN chmod +x /usr/local/bin/install-php-extensions && \
@@ -43,7 +43,7 @@ WORKDIR /var/www/html
 # Transfer completed file assembly from builder layer
 COPY --from=builder /app /var/www/html
 
-# CRITICAL FIX: Ensure the execution user owns everything to prevent write exceptions
+# Ensure the execution user owns everything to prevent write exceptions
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
