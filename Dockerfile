@@ -3,7 +3,7 @@
 # ==============================================================================
 FROM php:8.3-fpm-alpine AS builder
 
-RUN apk add --no-cache --repository=http://alpinelinux.org \
+RUN apk add --no-cache \
     nodejs \
     npm \
     zip \
@@ -23,38 +23,32 @@ RUN npm ci && npm run build
 # ==============================================================================
 FROM php:8.3-fpm-alpine
 
+# Install Nginx, Supervisor, Bash, and compilation tooling required for system stability
 RUN apk add --no-cache \
     nginx \
     supervisor \
     bash \
     postgresql-client \
-    mariadb-client
+    mariadb-client \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    freetype-dev \
+    libzip-dev
 
-RUN apk add --no-cache --repository=http://alpinelinux.org \
-    php83-pdo_mysql \
-    php83-pdo_pgsql \
-    php83-gd \
-    php83-zip \
-    php83-bcmath \
-    php83-opcache
-
-RUN ln -sf /usr/lib/php83/modules/*.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/ \
-    && echo "extension=pdo_mysql.so" > /usr/local/etc/php/conf.d/ext-pdo_mysql.ini \
-    && echo "extension=pdo_pgsql.so" > /usr/local/etc/php/conf.d/ext-pdo_pgsql.ini \
-    && echo "extension=gd.so" > /usr/local/etc/php/conf.d/ext-gd.ini \
-    && echo "extension=zip.so" > /usr/local/etc/php/conf.d/ext-zip.ini \
-    && echo "extension=bcmath.so" > /usr/local/etc/php/conf.d/ext-bcmath.ini \
-    && echo "zend_extension=opcache.so" > /usr/local/etc/php/conf.d/ext-opcache.ini
+# Use standard native docker utility commands to cleanly bind extensions (Fixes symbol not found bug)
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install pdo_mysql pdo_pgsql gd zip bcmath opcache
 
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
-    && echo "opcache.enable_cli=1" >> /usr/local/etc/php/conf.d/ext-opcache.ini \
+    && echo "opcache.enable_cli=1" >> "$PHP_INI_DIR/conf.d/docker-php-ext-opcache.ini" \
     && echo "upload_max_filesize=32M" >> "$PHP_INI_DIR/conf.d/uploads.ini" \
     && echo "post_max_size=32M" >> "$PHP_INI_DIR/conf.d/uploads.ini"
 
 WORKDIR /var/www/html
 COPY --from=builder /app /var/www/html
 
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
+# CRITICAL FIX: Ensure www-data fully owns the complete web directory (Fixes Permission Denied bug)
+RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Inject Nginx configurations safely
@@ -91,7 +85,7 @@ RUN echo "[supervisord]" > /etc/supervisord.conf \
     && echo "stderr_logfile=/dev/stderr" >> /etc/supervisord.conf \
     && echo "stderr_logfile_maxbytes=0" >> /etc/supervisord.conf
 
-# Inject the startup engine shell script with proper system formatting
+# Inject the fixed startup engine script (Fixes non-interactive terminal prompt crash)
 RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
     && echo "echo 'Optimizing application run-caches...'" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan config:cache" >> /usr/local/bin/entrypoint.sh \
@@ -99,8 +93,8 @@ RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
     && echo "php artisan view:cache" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Executing database migrations against Aiven...'" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan migrate --force" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Enabling core framework modules...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan module:enable" >> /usr/local/bin/entrypoint.sh \
+    && echo "echo 'Enabling modules non-interactively...'" >> /usr/local/bin/entrypoint.sh \
+    && echo "php artisan module:enable --all || true" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Launching process manager stack...'" >> /usr/local/bin/entrypoint.sh \
     && echo "exec /usr/bin/supervisord -c /etc/supervisord.conf" >> /usr/local/bin/entrypoint.sh \
     && chmod +x /usr/local/bin/entrypoint.sh
