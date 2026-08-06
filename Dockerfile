@@ -24,7 +24,7 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
 WORKDIR /app
 COPY . .
 
-# Step A: Install Composer binaries and download vendor dependencies (CRITICAL FOR VITE)
+# Step A: Install Composer binaries cleanly using the correct installer URL
 RUN curl -sS https://getcomposer.org | php -- --install-dir=/usr/local/bin --filename=composer \
     && composer install --no-interaction --prefer-dist --optimize-autoloader
 
@@ -36,7 +36,7 @@ RUN npm ci && npm run build
 # ==============================================================================
 FROM php:8.3-fpm-alpine
 
-# Install minimal production run-time binaries (no heavy build tools)
+# Install minimal production run-time binaries
 RUN apk add --no-cache \
     nginx \
     supervisor \
