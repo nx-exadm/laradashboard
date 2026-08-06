@@ -81,6 +81,7 @@ RUN echo "[supervisord]" > /etc/supervisord.conf \
 RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
     && echo "echo 'Enforcing fresh configuration files...'" >> /usr/local/bin/entrypoint.sh \
     && echo "cp /var/www/html/.env.example /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
+    && echo "grep -q '^APP_KEY=' /var/www/html/.env || echo 'APP_KEY=' >> /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Wiping out stale setup configuration caches...'" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan config:clear" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan cache:clear" >> /usr/local/bin/entrypoint.sh \
@@ -92,8 +93,6 @@ RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
     && echo "chmod 664 /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Initializing application production encryption keys...'" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan key:generate --force" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Running active structural database schema migrations...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan migrate:fresh --seed --force" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Creating public storage folder links...'" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan storage:link --force" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Launching process manager stack...'" >> /usr/local/bin/entrypoint.sh \
