@@ -25,7 +25,7 @@ FROM php:8.3-fpm-alpine
 # Install core production services
 RUN apk add --no-cache nginx supervisor bash postgresql-client mariadb-client
 
-# Pull the official installer utility directly from its Docker Hub image (Fixes the URL issue)
+# Grab the official installer utility directly from its Docker Hub image
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 
 # Install all extensions dynamically without manually juggling header paths
@@ -42,10 +42,6 @@ WORKDIR /var/www/html
 
 # Transfer completed file assembly from builder layer
 COPY --from=builder /app /var/www/html
-
-# Ensure the execution user owns everything to prevent write exceptions
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Inject absolute Nginx server configurations cleanly
 RUN echo "server {" > /etc/nginx/http.d/default.conf \
@@ -82,6 +78,7 @@ RUN echo "[supervisord]" > /etc/supervisord.conf \
     && echo "stderr_logfile_maxbytes=0" >> /etc/supervisord.conf
 
 # Write the shell execution file to manage system bootstrap routines
+# CRITICAL FIX: Permissions are reset AT THE VERY END of optimization commands
 RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
     && echo "echo 'Optimizing application run-caches...'" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan config:cache" >> /usr/local/bin/entrypoint.sh \
@@ -91,6 +88,9 @@ RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
     && echo "php artisan migrate --force" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Enabling modules non-interactively...'" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan module:enable --all || true" >> /usr/local/bin/entrypoint.sh \
+    && echo "echo 'Applying absolute file ownership to www-data...'" >> /usr/local/bin/entrypoint.sh \
+    && echo "chown -R www-data:www-data /var/www/html" >> /usr/local/bin/entrypoint.sh \
+    && echo "chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Launching process manager stack...'" >> /usr/local/bin/entrypoint.sh \
     && echo "exec /usr/bin/supervisord -c /etc/supervisord.conf" >> /usr/local/bin/entrypoint.sh \
     && chmod +x /usr/local/bin/entrypoint.sh
