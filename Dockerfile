@@ -79,24 +79,23 @@ RUN echo "[supervisord]" > /etc/supervisord.conf \
 
 # Write the shell execution file to manage system bootstrap routines cleanly
 RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Ensuring active environment template configurations...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "if [ ! -f /var/www/html/.env ]; then" >> /usr/local/bin/entrypoint.sh \
-    && echo "    cp /var/www/html/.env.example /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
-    && echo "fi" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Applying absolute file ownership to www-data...'" >> /usr/local/bin/entrypoint.sh \
+    && echo "echo 'Enforcing fresh configuration files...'" >> /usr/local/bin/entrypoint.sh \
+    && echo "cp /var/www/html/.env.example /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
+    && echo "echo 'Wiping out stale setup configuration caches...'" >> /usr/local/bin/entrypoint.sh \
+    && echo "php artisan config:clear" >> /usr/local/bin/entrypoint.sh \
+    && echo "php artisan cache:clear" >> /usr/local/bin/entrypoint.sh \
+    && echo "php artisan route:clear" >> /usr/local/bin/entrypoint.sh \
+    && echo "php artisan view:clear" >> /usr/local/bin/entrypoint.sh \
+    && echo "echo 'Applying runtime permissions...'" >> /usr/local/bin/entrypoint.sh \
     && echo "chown -R www-data:www-data /var/www/html" >> /usr/local/bin/entrypoint.sh \
     && echo "chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache" >> /usr/local/bin/entrypoint.sh \
     && echo "chmod 664 /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Generating application production encryption key keys...'" >> /usr/local/bin/entrypoint.sh \
+    && echo "echo 'Initializing application production encryption keys...'" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan key:generate --force" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Creating public symlinks to active storage structures...'" >> /usr/local/bin/entrypoint.sh \
+    && echo "echo 'Running active structural database schema migrations...'" >> /usr/local/bin/entrypoint.sh \
+    && echo "php artisan migrate:fresh --seed --force" >> /usr/local/bin/entrypoint.sh \
+    && echo "echo 'Creating public storage folder links...'" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan storage:link --force" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Running safe structural schema database migrations...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan migrate --seed --force" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Optimizing application run-caches...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan config:clear" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan route:clear" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan view:clear" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Launching process manager stack...'" >> /usr/local/bin/entrypoint.sh \
     && echo "exec /usr/bin/supervisord -c /etc/supervisord.conf" >> /usr/local/bin/entrypoint.sh \
     && chmod +x /usr/local/bin/entrypoint.sh
