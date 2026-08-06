@@ -1,34 +1,58 @@
 # ==============================================================================
-# STAGE 1: Build Frontend Assets
+# STAGE 1: Install PHP Dependencies & Build Assets
 # ==============================================================================
-FROM node:20-alpine AS asset-builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
+FROM php:8.3-fpm-alpine AS builder
 
-# ==============================================================================
-# STAGE 2: Production PHP & Nginx Environment
-# ==============================================================================
-FROM php:8.3-fpm-alpine
-
-# Install production system dependencies, Nginx, and Supervisor
+# Install system dependencies, nodejs, npm, and postgresql development headers
 RUN apk add --no-cache \
-    nginx \
-    supervisor \
-    bash \
+    nodejs \
+    npm \
     libpng-dev \
     libjpeg-turbo-dev \
     freetype-dev \
     zip \
     libzip-dev \
-    postgresql-client \
-    mariadb-client
+    postgresql-dev \
+    mariadb-dev \
+    curl \
+    git
 
-# Configure and install PHP extensions required by Laravel and Lara Dashboard
+# Configure and compile PHP extensions so we can execute artisan commands if needed
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo_mysql pdo_pgsql gd zip bcmath opcache
+    && docker-php-ext-install pdo_mysql pdo_pgsql gd zip bcmath
+
+WORKDIR /app
+COPY . .
+
+# Step A: Install Composer binaries and download vendor dependencies (CRITICAL FOR VITE)
+RUN curl -sS https://getcomposer.org | php -- --install-dir=/usr/local/bin --filename=composer \
+    && composer install --no-interaction --prefer-dist --optimize-autoloader
+
+# Step B: Compile frontend assets now that livewire files exist in /vendor
+RUN npm ci && npm run build
+
+# ==============================================================================
+# STAGE 2: Optimized Production Runtime
+# ==============================================================================
+FROM php:8.3-fpm-alpine
+
+# Install minimal production run-time binaries (no heavy build tools)
+RUN apk add --no-cache \
+    nginx \
+    supervisor \
+    bash \
+    libpng \
+    libjpeg-turbo \
+    freetype \
+    libzip \
+    postgresql-libs \
+    mariadb-connector-c
+
+# Re-install compiled extensions quickly from fresh binaries
+RUN apk add --no-cache --virtual .build-deps postgresql-dev mariadb-dev libpng-dev libjpeg-turbo-dev freetype-dev libzip-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install pdo_mysql pdo_pgsql gd zip bcmath opcache \
+    && apk del .build-deps
 
 # Configure custom optimized production PHP settings
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
@@ -36,20 +60,12 @@ RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
     && echo "upload_max_filesize=32M" >> "$PHP_INI_DIR/conf.d/uploads.ini" \
     && echo "post_max_size=32M" >> "$PHP_INI_DIR/conf.d/uploads.ini"
 
-# Establish application directory
 WORKDIR /var/www/html
 
-# Copy application source code
-COPY . .
+# Copy application and pre-compiled structural code from stage 1
+COPY --from=builder /app /var/www/html
 
-# Copy compiled frontend assets from Stage 1
-COPY --from=asset-builder /app/public/build ./public/build
-
-# Install Composer binaries and pull production PHP dependencies
-RUN curl -sS https://getcomposer.org | php -- --install-dir=/usr/local/bin --filename=composer \
-    && composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
-
-# Set structural permissions so Laravel can write logs, sessions, and caches
+# Set exact structural permissions for Laravel deployment
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
@@ -76,7 +92,7 @@ RUN echo 'server { \
     } \
 }' > /etc/nginx/http.d/default.conf
 
-# Write the custom Supervisor configuration to orchestrate Nginx and PHP-FPM together
+# Write the custom Supervisor configuration to orchestrate systems together
 RUN echo '[supervisord] \n\
 nodaemon=true \n\
 user=root \n\
@@ -97,25 +113,22 @@ stdout_logfile_maxbytes=0 \n\
 stderr_logfile=/dev/stderr \n\
 stderr_logfile_maxbytes=0' > /etc/supervisord.conf
 
-# Create the startup entrypoint script directly inside the image
+# Create the automated startup engine script
 RUN echo '#!/bin/sh \n\
-echo "Running optimization and runtime caches..." \n\
+echo "Optimizing applications caches..." \n\
 php artisan config:cache \n\
 php artisan route:cache \n\
 php artisan view:cache \n\
 \n\
-echo "Executing database schema migrations on Aiven..." \n\
+echo "Running schema migrations against Aiven..." \n\
 php artisan migrate --force \n\
 \n\
-echo "Bootstrapping CMS Modules..." \n\
+echo "Booting framework modules..." \n\
 php artisan module:enable \n\
 \n\
-echo "Starting Application Environment..." \n\
+echo "Launching Supervisor process stack..." \n\
 exec /usr/bin/supervisord -c /etc/supervisord.conf' > /usr/local/bin/entrypoint.sh \
     && chmod +x /usr/local/bin/entrypoint.sh
 
-# Render binds to port 80 dynamically
 EXPOSE 80
-
-# Execute the entrypoint script on boot
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
