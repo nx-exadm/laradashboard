@@ -3,74 +3,74 @@
 # ==============================================================================
 FROM php:8.3-fpm-alpine AS builder
 
-# Install system dependencies, nodejs, npm, and database development headers
-RUN apk add --no-cache \
+# Set up the community repository for pre-compiled PHP extensions
+RUN apk add --no-cache --repository=http://alpinelinux.org \
     nodejs \
     npm \
-    libpng-dev \
-    libjpeg-turbo-dev \
-    freetype-dev \
     zip \
     libzip-dev \
-    postgresql-dev \
-    mariadb-dev \
-    git
-
-# Configure and compile core PHP extensions for the builder environment
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo_mysql pdo_pgsql gd zip bcmath
+    git \
+    curl
 
 WORKDIR /app
 COPY . .
 
-# Inject the official Composer binary directly from Docker Hub (Prevents Download Failures)
+# Inject the official Composer binary directly from Docker Hub 
 COPY --from=composer:2.7 /usr/bin/composer /usr/local/bin/composer
 
-# Install structural back-end PHP dependencies
-RUN composer install --no-interaction --prefer-dist --optimize-autoloader
+# Install backend dependencies without needing full extension runtimes in stage 1
+RUN composer install --no-interaction --prefer-dist --optimize-autoloader --ignore-platform-reqs
 
 # Compile the public Vite frontend assets
 RUN npm ci && npm run build
 
 # ==============================================================================
-# STAGE 2: Highly Optimized Production Application Environment
+# STAGE 2: High-Speed Production Application Environment (No Compiling)
 # ==============================================================================
 FROM php:8.3-fpm-alpine
 
-# Install minimal production system runtime binaries
+# Install Nginx, Supervisor, Bash, and native Postgres/MySQL runtime clients
 RUN apk add --no-cache \
     nginx \
     supervisor \
     bash \
-    libpng \
-    libjpeg-turbo \
-    freetype \
-    libzip \
-    postgresql-libs \
-    mariadb-connector-c
+    postgresql-client \
+    mariadb-client
 
-# Compile required production PHP extensions and strip out build tools immediately
-RUN apk add --no-cache --virtual .build-deps postgresql-dev mariadb-dev libpng-dev libjpeg-turbo-dev freetype-dev libzip-dev \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo_mysql pdo_pgsql gd zip bcmath opcache \
-    && apk del .build-deps
+# Install PRE-COMPILED PHP extensions directly via Alpine packages (Takes ~3 seconds)
+RUN apk add --no-cache --repository=http://alpinelinux.org \
+    php83-pdo_mysql \
+    php83-pdo_pgsql \
+    php83-gd \
+    php83-zip \
+    php83-bcmath \
+    php83-opcache
 
-# Configure optimal production caching adjustments inside PHP
+# Symlink Alpine's native extensions so standard PHP-FPM reads them natively
+RUN ln -sf /usr/lib/php83/modules/*.so /usr/local/lib/php/extensions/no-debug-non-zts-20230831/ \
+    && echo "extension=pdo_mysql.so" > /usr/local/etc/php/conf.d/ext-pdo_mysql.ini \
+    && echo "extension=pdo_pgsql.so" > /usr/local/etc/php/conf.d/ext-pdo_pgsql.ini \
+    && echo "extension=gd.so" > /usr/local/etc/php/conf.d/ext-gd.ini \
+    && echo "extension=zip.so" > /usr/local/etc/php/conf.d/ext-zip.ini \
+    && echo "extension=bcmath.so" > /usr/local/etc/php/conf.d/ext-bcmath.ini \
+    && echo "zend_extension=opcache.so" > /usr/local/etc/php/conf.d/ext-opcache.ini
+
+# Configure production optimizations
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
-    && echo "opcache.enable_cli=1" >> "$PHP_INI_DIR/conf.d/docker-php-ext-opcache.ini" \
+    && echo "opcache.enable_cli=1" >> /usr/local/etc/php/conf.d/ext-opcache.ini \
     && echo "upload_max_filesize=32M" >> "$PHP_INI_DIR/conf.d/uploads.ini" \
     && echo "post_max_size=32M" >> "$PHP_INI_DIR/conf.d/uploads.ini"
 
 WORKDIR /var/www/html
 
-# Transfer the completed codebase assembly from Stage 1 into production workspace
+# Transfer completed build layers from Stage 1
 COPY --from=builder /app /var/www/html
 
-# Grant secure structural permissions to Laravel storage maps
+# Set exact permissions for Laravel deployment structures
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Inject the Nginx web routing rules inline
+# Inject Nginx configurations
 RUN echo 'server { \
     listen 80 default_server; \
     root /var/www/html/public; \
@@ -93,7 +93,7 @@ RUN echo 'server { \
     } \
 }' > /etc/nginx/http.d/default.conf
 
-# Configure Supervisor orchestration to manage Nginx and PHP concurrently
+# Inject Supervisor orchestration configs
 RUN echo '[supervisord] \n\
 nodaemon=true \n\
 user=root \n\
@@ -114,7 +114,7 @@ stdout_logfile_maxbytes=0 \n\
 stderr_logfile=/dev/stderr \n\
 stderr_logfile_maxbytes=0' > /etc/supervisord.conf
 
-# Create the automated execution script to configure caches and migrations at launch
+# Create the launch automation entrypoint script
 RUN echo '#!/bin/sh \n\
 echo "Optimizing framework application run-caches..." \n\
 php artisan config:cache \n\
