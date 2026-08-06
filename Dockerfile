@@ -3,19 +3,18 @@
 # ==============================================================================
 FROM php:8.3-fpm-alpine AS builder
 
-RUN apk add --no-cache \
-    nodejs \
-    npm \
-    zip \
-    libzip-dev \
-    git \
-    curl
+RUN apk add --no-cache nodejs npm zip libzip-dev git curl
 
 WORKDIR /app
 COPY . .
 
+# Secure a pre-compiled Composer binary cleanly
 COPY --from=composer:2.7 /usr/bin/composer /usr/local/bin/composer
+
+# Install backend files safely ignoring local machine requirements
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader --ignore-platform-reqs
+
+# Install frontend modules and compile code blocks
 RUN npm ci && npm run build
 
 # ==============================================================================
@@ -23,35 +22,32 @@ RUN npm ci && npm run build
 # ==============================================================================
 FROM php:8.3-fpm-alpine
 
-# Install Nginx, Supervisor, Bash, and compilation tooling required for system stability
-RUN apk add --no-cache \
-    nginx \
-    supervisor \
-    bash \
-    postgresql-client \
-    mariadb-client \
-    libpng-dev \
-    libjpeg-turbo-dev \
-    freetype-dev \
-    libzip-dev
+# Install core production services
+RUN apk add --no-cache nginx supervisor bash postgresql-client mariadb-client
 
-# Use standard native docker utility commands to cleanly bind extensions (Fixes symbol not found bug)
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo_mysql pdo_pgsql gd zip bcmath opcache
+# Grab the official, rock-solid automated PHP extension installer utility
+ADD https://github.com /usr/local/bin/
 
+# Install all extensions dynamically without manually juggling header paths
+RUN chmod +x /usr/local/bin/install-php-extensions && \
+    install-php-extensions pdo_mysql pdo_pgsql gd zip bcmath opcache
+
+# Configure optimal production caching rules inside PHP
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
     && echo "opcache.enable_cli=1" >> "$PHP_INI_DIR/conf.d/docker-php-ext-opcache.ini" \
     && echo "upload_max_filesize=32M" >> "$PHP_INI_DIR/conf.d/uploads.ini" \
     && echo "post_max_size=32M" >> "$PHP_INI_DIR/conf.d/uploads.ini"
 
 WORKDIR /var/www/html
+
+# Transfer completed file assembly from builder layer
 COPY --from=builder /app /var/www/html
 
-# CRITICAL FIX: Ensure www-data fully owns the complete web directory (Fixes Permission Denied bug)
+# CRITICAL FIX: Ensure the execution user owns everything to prevent write exceptions
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Inject Nginx configurations safely
+# Inject absolute Nginx server configurations cleanly
 RUN echo "server {" > /etc/nginx/http.d/default.conf \
     && echo "    listen 80 default_server;" >> /etc/nginx/http.d/default.conf \
     && echo "    root /var/www/html/public;" >> /etc/nginx/http.d/default.conf \
@@ -68,7 +64,7 @@ RUN echo "server {" > /etc/nginx/http.d/default.conf \
     && echo "    }" >> /etc/nginx/http.d/default.conf \
     && echo "}" >> /etc/nginx/http.d/default.conf
 
-# Inject Supervisor configurations safely
+# Inject Supervisor multi-process configuration parameters safely
 RUN echo "[supervisord]" > /etc/supervisord.conf \
     && echo "nodaemon=true" >> /etc/supervisord.conf \
     && echo "user=root" >> /etc/supervisord.conf \
@@ -85,7 +81,7 @@ RUN echo "[supervisord]" > /etc/supervisord.conf \
     && echo "stderr_logfile=/dev/stderr" >> /etc/supervisord.conf \
     && echo "stderr_logfile_maxbytes=0" >> /etc/supervisord.conf
 
-# Inject the fixed startup engine script (Fixes non-interactive terminal prompt crash)
+# Write the shell execution file to manage system bootstrap routines
 RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
     && echo "echo 'Optimizing application run-caches...'" >> /usr/local/bin/entrypoint.sh \
     && echo "php artisan config:cache" >> /usr/local/bin/entrypoint.sh \
