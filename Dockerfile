@@ -78,19 +78,14 @@ RUN echo "[supervisord]" > /etc/supervisord.conf \
     && echo "stderr_logfile_maxbytes=0" >> /etc/supervisord.conf
 
 # Write the shell execution file to manage system bootstrap routines
-# CRITICAL BYPASS: Adds direct environment forcing values so the installer wizard is completely bypassed
+# CRITICAL COMPILER REPAIR: Dynamically injects an HTTPS enforcement scheme directly into the Laravel boot system code.
 RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Forcing setup application variables...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'INSTALLED=true' >> /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'APP_INSTALLED=true' >> /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
+    && echo "echo 'Injecting SSL protocol configurations...'" >> /usr/local/bin/entrypoint.sh \
+    && echo "sed -i \"/public function boot/a \\\ \ \ \ \ \ \\\Illuminate\\\Support\\\Facades\\\URL::forceScheme('https');\" /var/www/html/app/Providers/AppServiceProvider.php" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Optimizing application run-caches...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan config:cache" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan route:cache" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan view:cache" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Executing absolute database seed pipelines...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan migrate:fresh --seed --force || true" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Enabling modules non-interactively...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan module:enable --all || true" >> /usr/local/bin/entrypoint.sh \
+    && echo "php artisan config:clear" >> /usr/local/bin/entrypoint.sh \
+    && echo "php artisan route:clear" >> /usr/local/bin/entrypoint.sh \
+    && echo "php artisan view:clear" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Applying absolute file ownership to www-data...'" >> /usr/local/bin/entrypoint.sh \
     && echo "chown -R www-data:www-data /var/www/html" >> /usr/local/bin/entrypoint.sh \
     && echo "chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache" >> /usr/local/bin/entrypoint.sh \
