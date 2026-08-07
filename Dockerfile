@@ -5,7 +5,7 @@
 
 
 # ==============================================================================
-# STAGE 1 — BUILD
+# STAGE 1: BUILD
 # ==============================================================================
 
 FROM php:8.3-fpm-alpine AS builder
@@ -38,42 +38,61 @@ COPY . .
 # ==============================================================================
 
 RUN echo "==================================================" \
-    && echo "Installing Starter26" \
+    && echo "Installing Starter26 v1.0.4" \
     && echo "==================================================" \
     && test -f /app/starter26-v1.0.4.zip \
     && mkdir -p /app/modules \
     && rm -rf /app/modules/Starter26 \
-    && rm -rf /tmp/starter26-install \
     && mkdir -p /tmp/starter26-install \
     && unzip -q /app/starter26-v1.0.4.zip -d /tmp/starter26-install \
-    && if [ -f /tmp/starter26-install/Starter26/module.json ]; then \
-         mv /tmp/starter26-install/Starter26 /app/modules/Starter26; \
-       elif [ -f /tmp/starter26-install/module.json ]; then \
-         mv /tmp/starter26-install /app/modules/Starter26; \
-       else \
-         echo "ERROR: Could not find Starter26/module.json inside ZIP"; \
-         find /tmp/starter26-install -maxdepth 3 -type f | sort; \
-         exit 1; \
-       fi \
+    && test -f /tmp/starter26-install/Starter26/module.json \
+    && mv /tmp/starter26-install/Starter26 /app/modules/Starter26 \
     && rm -rf /tmp/starter26-install \
     && echo "Starter26 installed successfully."
 
 
 # ==============================================================================
-# VERIFY STARTER26
+# VERIFY MODULE
 # ==============================================================================
 
 RUN echo "==================================================" \
-    && echo "STARTER26 DIRECTORY" \
+    && echo "Starter26 module.json" \
     && echo "==================================================" \
-    && find /app/modules/Starter26 -maxdepth 3 -type f | sort
+    && cat /app/modules/Starter26/module.json
 
+
+# ==============================================================================
+# VERIFY PRECOMPILED THEME
+# ==============================================================================
 
 RUN echo "==================================================" \
-    && echo "STARTER26 MANIFEST" \
+    && echo "Starter26 precompiled assets" \
     && echo "==================================================" \
-    && test -f /app/modules/Starter26/module.json \
-    && cat /app/modules/Starter26/module.json
+    && test -f /app/modules/Starter26/dist/build-starter26/manifest.json \
+    && find /app/modules/Starter26/dist/build-starter26 -type f | sort
+
+
+# ==============================================================================
+# FIX BROKEN DEMO VIEW
+#
+# The original ZIP contains:
+#
+# resources/views/index.blade.php
+#
+# which uses:
+#
+# <x-starter26::layouts.master>
+#
+# but master.blade.php is located at:
+#
+# resources/views/layouts/master.blade.php
+#
+# That is not a valid anonymous component location.
+#
+# The actual Starter26 frontend does NOT use this demo view.
+# ==============================================================================
+
+RUN rm -f /app/modules/Starter26/resources/views/index.blade.php
 
 
 # ==============================================================================
@@ -83,6 +102,10 @@ RUN echo "==================================================" \
 COPY --from=composer:2.7 /usr/bin/composer /usr/local/bin/composer
 
 
+# ==============================================================================
+# INSTALL LARAVEL DEPENDENCIES
+# ==============================================================================
+
 RUN composer install \
     --no-interaction \
     --prefer-dist \
@@ -90,9 +113,9 @@ RUN composer install \
     --ignore-platform-reqs
 
 
-# ------------------------------------------------------------------------------
-# Rebuild autoload
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# REBUILD AUTOLOADER
+# ==============================================================================
 
 RUN composer dump-autoload \
     --optimize \
@@ -100,7 +123,7 @@ RUN composer dump-autoload \
 
 
 # ==============================================================================
-# FRONTEND
+# BUILD MAIN APPLICATION
 # ==============================================================================
 
 RUN npm ci
@@ -109,7 +132,7 @@ RUN npm run build
 
 
 # ==============================================================================
-# STAGE 2 — PRODUCTION
+# STAGE 2: PRODUCTION
 # ==============================================================================
 
 FROM php:8.3-fpm-alpine
@@ -124,8 +147,7 @@ RUN apk add --no-cache \
     supervisor \
     bash \
     postgresql-client \
-    mariadb-client \
-    unzip
+    mariadb-client
 
 
 # ==============================================================================
@@ -135,7 +157,6 @@ RUN apk add --no-cache \
 COPY --from=mlocati/php-extension-installer \
     /usr/bin/install-php-extensions \
     /usr/local/bin/install-php-extensions
-
 
 RUN chmod +x /usr/local/bin/install-php-extensions \
     && install-php-extensions \
@@ -156,14 +177,12 @@ RUN chmod +x /usr/local/bin/install-php-extensions \
 
 
 # ==============================================================================
-# PHP CONFIGURATION
+# PHP PRODUCTION CONFIG
 # ==============================================================================
 
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
-
 RUN cat <<'EOF' > "$PHP_INI_DIR/conf.d/production.ini"
-
 opcache.enable=1
 opcache.enable_cli=1
 opcache.validate_timestamps=0
@@ -173,7 +192,6 @@ opcache.max_accelerated_files=20000
 upload_max_filesize=32M
 post_max_size=32M
 memory_limit=256M
-
 EOF
 
 
@@ -187,28 +205,37 @@ COPY --from=builder /app /var/www/html
 
 
 # ==============================================================================
-# VERIFY FINAL STARTER26
+# INSTALL STARTER26 PRECOMPILED ASSETS
+#
+# The ZIP already contains:
+#
+# modules/Starter26/dist/build-starter26/
+#
+# Laravel @vite(..., 'build-starter26') expects:
+#
+# public/build-starter26/
+# ==============================================================================
+
+RUN mkdir -p /var/www/html/public/build-starter26 \
+    && cp -rf /var/www/html/modules/Starter26/dist/build-starter26/* \
+        /var/www/html/public/build-starter26/
+
+
+# ==============================================================================
+# VERIFY STARTER26
 # ==============================================================================
 
 RUN echo "==================================================" \
-    && echo "FINAL IMAGE — STARTER26" \
+    && echo "FINAL STARTER26 CHECK" \
     && echo "==================================================" \
     && test -f /var/www/html/modules/Starter26/module.json \
-    && cat /var/www/html/modules/Starter26/module.json
-
-
-RUN echo "==================================================" \
-    && echo "STARTER26 ASSETS" \
-    && echo "==================================================" \
-    && if [ -d /var/www/html/modules/Starter26/dist ]; then \
-         find /var/www/html/modules/Starter26/dist -type f | sort; \
-       else \
-         echo "WARNING: Starter26 dist directory not found"; \
-       fi
+    && test -f /var/www/html/public/build-starter26/manifest.json \
+    && echo "Starter26 module: FOUND" \
+    && echo "Starter26 Vite manifest: FOUND"
 
 
 # ==============================================================================
-# LARAVEL DIRECTORIES
+# CREATE REQUIRED LARAVEL DIRECTORIES
 # ==============================================================================
 
 RUN mkdir -p \
@@ -222,31 +249,13 @@ RUN mkdir -p \
 
 # ==============================================================================
 # NGINX
-#
-# IMPORTANT:
-# Render supplies PORT.
-# Default Render PORT = 10000.
-#
-# We generate the config at container startup so Nginx listens on
-# the actual Render PORT.
 # ==============================================================================
-
 
 RUN mkdir -p /etc/nginx/http.d
 
-
-RUN cat <<'EOF' > /usr/local/bin/configure-nginx.sh
-#!/bin/sh
-
-set -e
-
-PORT="${PORT:-10000}"
-
-echo "Configuring Nginx on port ${PORT}..."
-
-cat > /etc/nginx/http.d/default.conf <<NGINX
+RUN cat <<'EOF' > /etc/nginx/http.d/default.conf
 server {
-    listen 0.0.0.0:${PORT} default_server;
+    listen 80 default_server;
     server_name _;
 
     root /var/www/html/public;
@@ -256,11 +265,11 @@ server {
     charset utf-8;
 
     location / {
-        try_files \$uri \$uri/ /index.php?\$query_string;
+        try_files $uri $uri/ /index.php?$query_string;
     }
 
     location ~ \.php$ {
-        try_files \$uri =404;
+        try_files $uri =404;
 
         fastcgi_pass 127.0.0.1:9000;
 
@@ -268,20 +277,15 @@ server {
 
         include fastcgi_params;
 
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        fastcgi_param DOCUMENT_ROOT \$document_root;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param DOCUMENT_ROOT $document_root;
     }
 
     location ~ /\.ht {
         deny all;
     }
 }
-NGINX
-
 EOF
-
-
-RUN chmod +x /usr/local/bin/configure-nginx.sh
 
 
 # ==============================================================================
@@ -341,22 +345,11 @@ set -e
 
 cd /var/www/html
 
-
 echo ""
 echo "=================================================="
 echo "LaraDashboard Production Startup"
 echo "=================================================="
 echo ""
-
-
-
-# ==============================================================================
-# RENDER PORT
-# ==============================================================================
-
-export PORT="${PORT:-10000}"
-
-echo "HTTP PORT: ${PORT}"
 
 
 # ==============================================================================
@@ -368,7 +361,7 @@ if [ -z "${APP_KEY:-}" ]; then
     echo ""
     echo "ERROR: APP_KEY is missing."
     echo ""
-    echo "Add APP_KEY to Render Environment Variables."
+    echo "Set APP_KEY in Render Environment Variables."
     echo ""
 
     exit 1
@@ -394,7 +387,7 @@ fi
 
 
 # ==============================================================================
-# SET APP_KEY
+# WRITE APP KEY
 # ==============================================================================
 
 if grep -q '^APP_KEY=' /var/www/html/.env; then
@@ -424,21 +417,54 @@ chmod -R 775 \
 
 
 # ==============================================================================
-# CONFIGURE NGINX
-# ==============================================================================
-
-echo "Configuring Nginx..."
-
-/usr/local/bin/configure-nginx.sh
-
-
-# ==============================================================================
 # CLEAR OLD LARAVEL CACHE
 # ==============================================================================
 
 echo "Clearing Laravel caches..."
 
 php artisan optimize:clear
+
+
+# ==============================================================================
+# VERIFY STARTER26
+# ==============================================================================
+
+echo ""
+echo "=================================================="
+echo "STARTER26 MODULE"
+echo "=================================================="
+
+if [ ! -f /var/www/html/modules/Starter26/module.json ]; then
+
+    echo "ERROR: Starter26 module is missing."
+
+    exit 1
+
+fi
+
+echo "Starter26 module: FOUND"
+
+
+# ==============================================================================
+# VERIFY STARTER26 ASSETS
+# ==============================================================================
+
+echo ""
+echo "=================================================="
+echo "STARTER26 ASSETS"
+echo "=================================================="
+
+if [ ! -f /var/www/html/public/build-starter26/manifest.json ]; then
+
+    echo "ERROR: Starter26 Vite manifest is missing."
+
+    exit 1
+
+fi
+
+echo "Starter26 Vite manifest: FOUND"
+
+find /var/www/html/public/build-starter26 -maxdepth 2 -type f | sort
 
 
 # ==============================================================================
@@ -454,47 +480,7 @@ php artisan module:list || true
 
 
 # ==============================================================================
-# STARTER26 CHECK
-# ==============================================================================
-
-echo ""
-echo "=================================================="
-echo "STARTER26 CHECK"
-echo "=================================================="
-
-if [ -f /var/www/html/modules/Starter26/module.json ]; then
-
-    echo "Starter26 module: FOUND"
-
-    echo ""
-    echo "Starter26 manifest:"
-    cat /var/www/html/modules/Starter26/module.json
-
-else
-
-    echo ""
-    echo "ERROR: Starter26 module is missing."
-    echo ""
-
-    exit 1
-
-fi
-
-
-# ==============================================================================
-# ROUTE CHECK
-# ==============================================================================
-
-echo ""
-echo "=================================================="
-echo "CURRENT ROUTES"
-echo "=================================================="
-
-php artisan route:list --except-vendor 2>/dev/null || php artisan route:list || true
-
-
-# ==============================================================================
-# CONFIG CACHE
+# LARAVEL CONFIG CACHE
 # ==============================================================================
 
 echo ""
@@ -504,7 +490,7 @@ php artisan config:cache
 
 
 # ==============================================================================
-# ROUTE CACHE
+# LARAVEL ROUTE CACHE
 # ==============================================================================
 
 echo ""
@@ -514,7 +500,7 @@ php artisan route:cache
 
 
 # ==============================================================================
-# VIEW CACHE
+# LARAVEL VIEW CACHE
 # ==============================================================================
 
 echo ""
@@ -547,31 +533,18 @@ chmod -R 775 \
 
 
 # ==============================================================================
-# NGINX TEST
-# ==============================================================================
-
-echo ""
-echo "Testing Nginx configuration..."
-
-nginx -t
-
-
-# ==============================================================================
-# START
+# START SERVICES
 # ==============================================================================
 
 echo ""
 echo "=================================================="
-echo "Starting LaraDashboard"
-echo "Nginx: 0.0.0.0:${PORT}"
-echo "PHP-FPM: 127.0.0.1:9000"
+echo "Starting Nginx + PHP-FPM"
 echo "=================================================="
 echo ""
 
 exec /usr/bin/supervisord -c /etc/supervisord.conf
 
 EOF
-
 
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
@@ -580,6 +553,6 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # RENDER
 # ==============================================================================
 
-EXPOSE 10000
+EXPOSE 80
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
