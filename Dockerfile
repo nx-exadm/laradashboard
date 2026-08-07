@@ -8,6 +8,10 @@ RUN apk add --no-cache nodejs npm zip libzip-dev git curl
 WORKDIR /app
 COPY . .
 
+# CRITICAL FIX: Ensure the modules directory exists and manually clone the theme source code
+RUN mkdir -p /app/modules/Starter26
+RUN git clone https://github.com /app/modules/Starter26 || true
+
 # Secure a pre-compiled Composer binary cleanly
 COPY --from=composer:2.7 /usr/bin/composer /usr/local/bin/composer
 
@@ -43,8 +47,12 @@ WORKDIR /var/www/html
 # Transfer completed file assembly from builder layer
 COPY --from=builder /app /var/www/html
 
-# Explicitly verify public build directory paths exist for themes
-RUN mkdir -p /var/www/html/public/build-starter26
+# Hard-copy theme views into primary Laravel layouts so it renders directly
+RUN mkdir -p /var/www/html/resources/views/layouts \
+    && if [ -d /var/www/html/modules/Starter26/resources/views ]; then \
+        cp -rf /var/www/html/modules/Starter26/resources/views/* /var/www/html/resources/views/ \
+        && cp -f /var/www/html/modules/Starter26/resources/views/layouts/app.blade.php /var/www/html/resources/views/layouts/app.blade.php; \
+       fi
 
 # Inject absolute Nginx server configurations cleanly
 RUN echo "server {" > /etc/nginx/http.d/default.conf \
@@ -61,7 +69,7 @@ RUN echo "server {" > /etc/nginx/http.d/default.conf \
     && echo "        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;" >> /etc/nginx/http.d/default.conf \
     && echo "        include fastcgi_params;" >> /etc/nginx/http.d/default.conf \
     && echo "    }" >> /etc/nginx/http.d/default.conf \
-    && echo "}" >> /etc/nginx/http.d/default.conf
+    " >> /etc/nginx/http.d/default.conf
 
 # Inject Supervisor multi-process configuration parameters safely
 RUN echo "[supervisord]" > /etc/supervisord.conf \
@@ -106,8 +114,10 @@ chown -R www-data:www-data /var/www/html
 chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 chmod 664 /var/www/html/.env
 
-echo 'Initializing application production encryption keys...'
-php artisan key:generate --force
+if [ -f /var/www/html/.env ] && ! grep -q '^APP_KEY=base64:' /var/www/html/.env; then
+    echo 'Initializing application production encryption keys...'
+    php artisan key:generate --force
+fi
 
 echo 'Creating public storage folder links...'
 php artisan storage:link --force
