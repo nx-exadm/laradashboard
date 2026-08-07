@@ -81,13 +81,12 @@ RUN echo "[supervisord]" > /etc/supervisord.conf \
 RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
     && echo "set -e" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Enforcing fresh configuration files...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "cp /var/www/html/.env.example /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
+    && echo "[ ! -f /var/www/html/.env ] && cp /var/www/html/.env.example /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
     && echo "grep -q '^APP_KEY=' /var/www/html/.env || echo 'APP_KEY=' >> /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Wiping out stale setup configuration caches...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan config:clear" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan cache:clear" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan route:clear" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan view:clear" >> /usr/local/bin/entrypoint.sh \
+    && echo "echo 'Caching configurations for production asset mapping...'" >> /usr/local/bin/entrypoint.sh \
+    && echo "php artisan config:cache" >> /usr/local/bin/entrypoint.sh \
+    && echo "php artisan route:cache" >> /usr/local/bin/entrypoint.sh \
+    && echo "php artisan view:cache" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Applying runtime permissions...'" >> /usr/local/bin/entrypoint.sh \
     && echo "chown -R www-data:www-data /var/www/html" >> /usr/local/bin/entrypoint.sh \
     && echo "chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache" >> /usr/local/bin/entrypoint.sh \
