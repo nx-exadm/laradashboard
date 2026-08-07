@@ -79,6 +79,7 @@ RUN echo "[supervisord]" > /etc/supervisord.conf \
 
 # Write the shell execution file to manage system bootstrap routines cleanly
 RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
+    && echo "set -e" >> /usr/local/bin/entrypoint.sh \
     && echo "echo 'Enforcing fresh configuration files...'" >> /usr/local/bin/entrypoint.sh \
     && echo "cp /var/www/html/.env.example /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
     && echo "grep -q '^APP_KEY=' /var/www/html/.env || echo 'APP_KEY=' >> /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
