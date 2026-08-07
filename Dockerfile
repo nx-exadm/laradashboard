@@ -43,6 +43,9 @@ WORKDIR /var/www/html
 # Transfer completed file assembly from builder layer
 COPY --from=builder /app /var/www/html
 
+# Explicitly verify public build directory paths exist for themes
+RUN mkdir -p /var/www/html/public/build-starter26
+
 # Inject absolute Nginx server configurations cleanly
 RUN echo "server {" > /etc/nginx/http.d/default.conf \
     && echo "    listen 80 default_server;" >> /etc/nginx/http.d/default.conf \
@@ -52,7 +55,7 @@ RUN echo "server {" > /etc/nginx/http.d/default.conf \
     && echo "    location / {" >> /etc/nginx/http.d/default.conf \
     && echo "        try_files \$uri \$uri/ /index.php?\$query_string;" >> /etc/nginx/http.d/default.conf \
     && echo "    }" >> /etc/nginx/http.d/default.conf \
-    && echo "    location ~ \.php$ {" >> /etc/nginx/http.d/default.conf \
+    && echo "    location ~ \.php\$ {" >> /etc/nginx/http.d/default.conf \
     && echo "        fastcgi_pass 127.0.0.1:9000;" >> /etc/nginx/http.d/default.conf \
     && echo "        fastcgi_index index.php;" >> /etc/nginx/http.d/default.conf \
     && echo "        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;" >> /etc/nginx/http.d/default.conf \
@@ -77,27 +80,43 @@ RUN echo "[supervisord]" > /etc/supervisord.conf \
     && echo "stderr_logfile=/dev/stderr" >> /etc/supervisord.conf \
     && echo "stderr_logfile_maxbytes=0" >> /etc/supervisord.conf
 
-# Write the shell execution file to manage system bootstrap routines cleanly
-RUN echo "#!/bin/sh" > /usr/local/bin/entrypoint.sh \
-    && echo "set -e" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Enforcing fresh configuration files...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "[ ! -f /var/www/html/.env ] && cp /var/www/html/.env.example /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
-    && echo "grep -q '^APP_KEY=' /var/www/html/.env || echo 'APP_KEY=' >> /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Caching configurations for production asset mapping...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan config:cache" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan route:cache" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan view:cache" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Applying runtime permissions...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "chown -R www-data:www-data /var/www/html" >> /usr/local/bin/entrypoint.sh \
-    && echo "chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache" >> /usr/local/bin/entrypoint.sh \
-    && echo "chmod 664 /var/www/html/.env" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Initializing application production encryption keys...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan key:generate --force" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Creating public storage folder links...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "php artisan storage:link --force" >> /usr/local/bin/entrypoint.sh \
-    && echo "echo 'Launching process manager stack...'" >> /usr/local/bin/entrypoint.sh \
-    && echo "exec /usr/bin/supervisord -c /etc/supervisord.conf" >> /usr/local/bin/entrypoint.sh \
-    && chmod +x /usr/local/bin/entrypoint.sh
+# Clean build wrapper for entrypoint generation preventing variable drops
+RUN cat << 'EOF' > /usr/local/bin/entrypoint.sh
+#!/bin/sh
+set -e
+
+echo 'Enforcing fresh configuration files...'
+if [ ! -f /var/www/html/.env ]; then
+    if [ -f /var/www/html/.env.example ]; then
+        cp /var/www/html/.env.example /var/www/html/.env
+    else
+        touch /var/www/html/.env
+    fi
+fi
+
+grep -q '^APP_KEY=' /var/www/html/.env || echo 'APP_KEY=' >> /var/www/html/.env
+
+echo 'Caching configurations for production asset mapping...'
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+
+echo 'Applying runtime permissions...'
+chown -R www-data:www-data /var/www/html
+chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+chmod 664 /var/www/html/.env
+
+echo 'Initializing application production encryption keys...'
+php artisan key:generate --force
+
+echo 'Creating public storage folder links...'
+php artisan storage:link --force
+
+echo 'Launching process manager stack...'
+exec /usr/bin/supervisord -c /etc/supervisord.conf
+EOF
+
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 EXPOSE 80
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
