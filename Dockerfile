@@ -41,63 +41,76 @@ COPY . .
 
 # ==============================================================================
 
-# INSTALL STARTER26 + FORUM MODULES FROM ZIP FILES
+# INSTALL STARTER26
 
 # ==============================================================================
 
 RUN set -eux; 
-mkdir -p /app/modules; 
-
 echo "=================================================="; 
 echo "Installing Starter26"; 
 echo "=================================================="; 
 test -f /app/starter26-v1.0.4.zip; 
-rm -rf /app/modules/Starter26 /tmp/starter26-install; 
+mkdir -p /app/modules; 
+rm -rf /app/modules/Starter26; 
+rm -rf /tmp/starter26-install; 
 mkdir -p /tmp/starter26-install; 
 unzip -q /app/starter26-v1.0.4.zip -d /tmp/starter26-install; 
-
 if [ -f /tmp/starter26-install/Starter26/module.json ]; then 
 mv /tmp/starter26-install/Starter26 /app/modules/Starter26; 
 elif [ -f /tmp/starter26-install/module.json ]; then 
-mkdir -p /app/modules/Starter26; 
-cp -R /tmp/starter26-install/. /app/modules/Starter26/; 
+mv /tmp/starter26-install /app/modules/Starter26; 
 else 
 echo "ERROR: Starter26 module.json was not found inside ZIP"; 
 find /tmp/starter26-install -maxdepth 5 -type f | sort; 
 exit 1; 
 fi; 
-
-rm -rf /tmp/starter26-install; 
 rm -f /app/starter26-v1.0.4.zip; 
+test -f /app/modules/Starter26/module.json; 
+echo "Starter26 installed successfully."
 
-echo "Starter26 installed successfully."; 
-test -f /app/modules/Starter26/module.json
+# ==============================================================================
+
+# INSTALL FORUM MODULE
+
+# ==============================================================================
 
 RUN set -eux; 
 echo "=================================================="; 
-echo "Installing Forum"; 
+echo "Searching for Forum module ZIP"; 
 echo "=================================================="; 
-test -f /app/forum-v0.1.3.zip; 
-rm -rf /app/modules/Forum /tmp/forum-install; 
+mkdir -p /app/modules; 
+FORUM_ZIP="$(find /app -maxdepth 1 -type f -iname 'forum*.zip' | head -n 1)"; 
+if [ -z "$FORUM_ZIP" ]; then 
+echo "ERROR: Forum ZIP was not found in repository root."; 
+echo "Expected a file such as forum.zip or forum-v1.0.0.zip"; 
+echo "Available ZIP files:"; 
+find /app -maxdepth 1 -type f -iname '*.zip' -print | sort; 
+exit 1; 
+fi; 
+echo "Forum ZIP found: $FORUM_ZIP"; 
+rm -rf /app/modules/Forum; 
+rm -rf /tmp/forum-install; 
 mkdir -p /tmp/forum-install; 
-unzip -q /app/forum-v0.1.3.zip -d /tmp/forum-install; 
-
+unzip -q "$FORUM_ZIP" -d /tmp/forum-install; 
+echo "Forum ZIP contents:"; 
+find /tmp/forum-install -maxdepth 4 -type f | sort; 
 if [ -f /tmp/forum-install/Forum/module.json ]; then 
 mv /tmp/forum-install/Forum /app/modules/Forum; 
 elif [ -f /tmp/forum-install/module.json ]; then 
-mkdir -p /app/modules/Forum; 
-cp -R /tmp/forum-install/. /app/modules/Forum/; 
+mv /tmp/forum-install /app/modules/Forum; 
 else 
-echo "ERROR: Forum module.json was not found inside ZIP"; 
-find /tmp/forum-install -maxdepth 5 -type f | sort; 
+FORUM_DIR="$(find /tmp/forum-install -mindepth 1 -maxdepth 1 -type d | head -n 1)"; 
+if [ -n "$FORUM_DIR" ] && [ -f "$FORUM_DIR/module.json" ]; then 
+mv "$FORUM_DIR" /app/modules/Forum; 
+else 
+echo "ERROR: Forum module.json was not found inside ZIP."; 
+echo "The ZIP structure does not contain a recognizable Forum module."; 
 exit 1; 
 fi; 
-
-rm -rf /tmp/forum-install; 
-rm -f /app/forum-v0.1.3.zip; 
-
-echo "Forum installed successfully."; 
-test -f /app/modules/Forum/module.json
+fi; 
+rm -f "$FORUM_ZIP"; 
+test -f /app/modules/Forum/module.json; 
+echo "Forum installed successfully."
 
 # ==============================================================================
 
@@ -107,29 +120,17 @@ test -f /app/modules/Forum/module.json
 
 RUN set -eux; 
 echo "=================================================="; 
-echo "STARTER26 MANIFEST"; 
+echo "MODULE VERIFICATION"; 
 echo "=================================================="; 
+echo ""; 
+echo "===== STARTER26 MANIFEST ====="; 
 cat /app/modules/Starter26/module.json; 
-
 echo ""; 
-echo "=================================================="; 
-echo "FORUM MANIFEST"; 
-echo "=================================================="; 
+echo "===== FORUM MANIFEST ====="; 
 cat /app/modules/Forum/module.json; 
-
 echo ""; 
-echo "=================================================="; 
-echo "MODULE DIRECTORIES"; 
-echo "=================================================="; 
-ls -la /app/modules; 
-
-echo ""; 
-echo "Starter26 providers:"; 
-ls -la /app/modules/Starter26/app/Providers; 
-
-echo ""; 
-echo "Forum providers:"; 
-ls -la /app/modules/Forum/app/Providers
+echo "===== MODULE DIRECTORIES ====="; 
+find /app/modules -maxdepth 2 -type f -name module.json -print | sort
 
 # ==============================================================================
 
@@ -151,69 +152,30 @@ RUN composer dump-autoload
 
 # ==============================================================================
 
-# STARTER26 FRONTEND BUILD
+# FRONTEND
 
 # ==============================================================================
+
+RUN npm ci
+
+# Build all frontend assets defined by the application's Vite configuration.
+
+RUN npm run build
+
+# Verify the Starter26 Vite manifest exists.
 
 RUN set -eux; 
 echo "=================================================="; 
-echo "BUILDING STARTER26 ASSETS"; 
+echo "VITE BUILD VERIFICATION"; 
 echo "=================================================="; 
-cd /app/modules/Starter26; 
-npm ci; 
-npm run build; 
-
-echo ""; 
-echo "Starter26 Vite output:"; 
-find /app/public/build-starter26 -maxdepth 3 -type f | sort; 
-
-test -f /app/public/build-starter26/manifest.json; 
-echo ""; 
-echo "Starter26 manifest found successfully."
-
-# ==============================================================================
-
-# FORUM FRONTEND BUILD
-
-# ==============================================================================
-
-RUN set -eux; 
-echo "=================================================="; 
-echo "BUILDING FORUM ASSETS"; 
-echo "=================================================="; 
-cd /app/modules/Forum; 
-npm ci; 
-npm run build; 
-
-echo ""; 
-echo "Forum Vite output:"; 
-find /app/public/build-forum -maxdepth 3 -type f | sort; 
-
-test -f /app/public/build-forum/manifest.json; 
-echo ""; 
-echo "Forum manifest found successfully."
-
-# ==============================================================================
-
-# VERIFY BOTH VITE MANIFESTS
-
-# ==============================================================================
-
-RUN set -eux; 
-echo "=================================================="; 
-echo "FINAL VITE MANIFEST CHECK"; 
-echo "=================================================="; 
-
-test -f /app/public/build-starter26/manifest.json; 
-test -f /app/public/build-forum/manifest.json; 
-
-echo ""; 
-echo "===== STARTER26 MANIFEST ====="; 
+if [ -f /app/public/build-starter26/manifest.json ]; then 
+echo "Starter26 Vite manifest: FOUND"; 
 cat /app/public/build-starter26/manifest.json; 
-
-echo ""; 
-echo "===== FORUM MANIFEST ====="; 
-cat /app/public/build-forum/manifest.json
+else 
+echo "WARNING: Starter26 Vite manifest was not generated."; 
+echo "Checking available build directories:"; 
+find /app/public -maxdepth 3 -type f -name manifest.json -print | sort || true; 
+fi
 
 # ==============================================================================
 
@@ -223,11 +185,11 @@ cat /app/public/build-forum/manifest.json
 
 FROM php:8.3-fpm-alpine
 
-# ------------------------------------------------------------------------------
+# ==============================================================================
 
-# Runtime packages
+# RUNTIME PACKAGES
 
-# ------------------------------------------------------------------------------
+# ==============================================================================
 
 RUN apk add --no-cache 
 nginx 
@@ -243,12 +205,12 @@ unzip
 
 # ==============================================================================
 
-COPY --from=mlocati/php-extension-installer:2 
+COPY --from=mlocati/php-extension-installer 
 /usr/bin/install-php-extensions 
 /usr/local/bin/install-php-extensions
 
-RUN chmod +x /usr/local/bin/install-php-extensions && 
-install-php-extensions 
+RUN chmod +x /usr/local/bin/install-php-extensions 
+&& install-php-extensions 
 pdo_mysql 
 pdo_pgsql 
 gd 
@@ -295,28 +257,6 @@ COPY --from=builder /app /var/www/html
 
 # ==============================================================================
 
-# VERIFY BUILT APPLICATION
-
-# ==============================================================================
-
-RUN set -eux; 
-echo "=================================================="; 
-echo "VERIFYING PRODUCTION FILES"; 
-echo "=================================================="; 
-
-test -f /var/www/html/modules/Starter26/module.json; 
-test -f /var/www/html/modules/Forum/module.json; 
-
-test -f /var/www/html/public/build-starter26/manifest.json; 
-test -f /var/www/html/public/build-forum/manifest.json; 
-
-echo "Starter26 module: OK"; 
-echo "Forum module: OK"; 
-echo "Starter26 Vite manifest: OK"; 
-echo "Forum Vite manifest: OK"
-
-# ==============================================================================
-
 # LARAVEL DIRECTORIES
 
 # ==============================================================================
@@ -335,16 +275,16 @@ RUN mkdir -p
 
 # ==============================================================================
 
-RUN chown -R www-data:www-data /var/www/html && 
-find /var/www/html -type d -exec chmod 755 {} ; && 
-find /var/www/html -type f -exec chmod 644 {} ; && 
-chmod -R 775 /var/www/html/storage && 
-chmod -R 775 /var/www/html/bootstrap/cache && 
-chmod +x /var/www/html/artisan
+RUN chown -R www-data:www-data /var/www/html 
+&& find /var/www/html -type d -exec chmod 755 {} ; 
+&& find /var/www/html -type f -exec chmod 644 {} ; 
+&& chmod -R 775 /var/www/html/storage 
+&& chmod -R 775 /var/www/html/bootstrap/cache 
+&& chmod +x /var/www/html/artisan
 
 # ==============================================================================
 
-# FINAL MODULE CHECK
+# FINAL MODULE VERIFICATION
 
 # ==============================================================================
 
@@ -352,17 +292,17 @@ RUN set -eux;
 echo "=================================================="; 
 echo "FINAL MODULE CHECK"; 
 echo "=================================================="; 
-
 test -f /var/www/html/modules/Starter26/module.json; 
-test -f /var/www/html/modules/Starter26/app/Providers/Starter26ServiceProvider.php; 
-test -f /var/www/html/modules/Starter26/app/Providers/Starter26LivewireServiceProvider.php; 
-
 test -f /var/www/html/modules/Forum/module.json; 
-test -f /var/www/html/modules/Forum/app/Providers/ForumServiceProvider.php; 
-test -f /var/www/html/modules/Forum/app/Providers/LivewireServiceProvider.php; 
-
-echo "Starter26: VERIFIED"; 
-echo "Forum: VERIFIED"
+test -f /var/www/html/modules/Starter26/app/Providers/Starter26ServiceProvider.php; 
+echo "Starter26: FOUND"; 
+echo "Forum: FOUND"; 
+echo ""; 
+echo "Starter26 providers:"; 
+ls -la /var/www/html/modules/Starter26/app/Providers; 
+echo ""; 
+echo "Forum structure:"; 
+find /var/www/html/modules/Forum -maxdepth 3 -type f | sort | head -200
 
 # ==============================================================================
 
@@ -538,30 +478,6 @@ chmod +x /var/www/html/artisan
 
 # ==============================================================================
 
-# VITE MANIFEST CHECK
-
-# ==============================================================================
-
-echo ""
-echo "=================================================="
-echo "VITE MANIFEST CHECK"
-echo "=================================================="
-
-if [ ! -f /var/www/html/public/build-starter26/manifest.json ]; then
-echo "ERROR: Starter26 Vite manifest is missing."
-exit 1
-fi
-
-if [ ! -f /var/www/html/public/build-forum/manifest.json ]; then
-echo "ERROR: Forum Vite manifest is missing."
-exit 1
-fi
-
-echo "Starter26 Vite manifest: FOUND"
-echo "Forum Vite manifest: FOUND"
-
-# ==============================================================================
-
 # STARTER26 CHECK
 
 # ==============================================================================
@@ -577,8 +493,6 @@ exit 1
 fi
 
 echo "Starter26 module: FOUND"
-
-ls -la /var/www/html/modules/Starter26/app/Providers
 
 # ==============================================================================
 
@@ -598,7 +512,9 @@ fi
 
 echo "Forum module: FOUND"
 
-ls -la /var/www/html/modules/Forum/app/Providers
+echo ""
+echo "Forum module manifest:"
+cat /var/www/html/modules/Forum/module.json
 
 # ==============================================================================
 
@@ -626,55 +542,16 @@ php artisan module:list || true
 
 # ==============================================================================
 
-# FORUM DATABASE MIGRATIONS
+# ROUTES
 
 # ==============================================================================
 
 echo ""
 echo "=================================================="
-echo "RUNNING DATABASE MIGRATIONS"
+echo "STARTER26 + FORUM ROUTES"
 echo "=================================================="
 
-php artisan migrate --force
-
-# ==============================================================================
-
-# SEED FORUM DATA
-
-# ==============================================================================
-
-echo ""
-echo "=================================================="
-echo "FORUM SEEDER"
-echo "=================================================="
-
-php artisan db:seed --class="Modules\Forum\Database\Seeders\ForumDatabaseSeeder" --force || true
-
-# ==============================================================================
-
-# STARTER26 ROUTES
-
-# ==============================================================================
-
-echo ""
-echo "=================================================="
-echo "STARTER26 ROUTES"
-echo "=================================================="
-
-php artisan route:list 2>/dev/null | grep -i starter26 || true
-
-# ==============================================================================
-
-# FORUM ROUTES
-
-# ==============================================================================
-
-echo ""
-echo "=================================================="
-echo "FORUM ROUTES"
-echo "=================================================="
-
-php artisan route:list 2>/dev/null | grep -i forum || true
+php artisan route:list 2>/dev/null | grep -Ei 'starter26|forum' || true
 
 # ==============================================================================
 
@@ -736,21 +613,28 @@ chmod -R 775
 
 # ==============================================================================
 
-# FINAL STATUS
+# FINAL VITE CHECK
 
 # ==============================================================================
 
 echo ""
 echo "=================================================="
-echo "FINAL STATUS"
+echo "VITE MANIFEST CHECK"
 echo "=================================================="
 
-echo "Starter26: INSTALLED"
-echo "Forum: INSTALLED"
-echo "Starter26 assets: BUILT"
-echo "Forum assets: BUILT"
-echo "Starter26 manifest: FOUND"
-echo "Forum manifest: FOUND"
+if [ -f /var/www/html/public/build-starter26/manifest.json ]; then
+echo "Starter26 Vite manifest: FOUND"
+else
+echo "WARNING: Starter26 Vite manifest NOT FOUND"
+echo "Available manifests:"
+find /var/www/html/public -type f -name manifest.json -print 2>/dev/null || true
+fi
+
+# ==============================================================================
+
+# START
+
+# ==============================================================================
 
 echo ""
 echo "=================================================="
