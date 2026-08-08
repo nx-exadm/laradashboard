@@ -1,5 +1,6 @@
+```dockerfile
 # ==============================================================================
-# LARADASHBOARD + STARTER26
+# LARADASHBOARD + STARTER26 + FORUM
 # Production Docker image for Render
 # ==============================================================================
 
@@ -30,24 +31,15 @@ WORKDIR /app
 
 COPY . .
 
-# ------------------------------------------------------------------------------
-# Install Starter26 from the ZIP committed to the repository
-#
-# Expected:
-# starter26-v1.0.4.zip
-#
-# ZIP structure:
-# Starter26/
-#   app/
-#   config/
-#   database/
-#   dist/
-#   resources/
-#   routes/
-#   module.json
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# INSTALL STARTER26 MODULE
+# ==============================================================================
 
 RUN set -eux; \
+    echo ""; \
+    echo "=================================================="; \
+    echo "INSTALLING STARTER26"; \
+    echo "=================================================="; \
     test -f /app/starter26-v1.0.4.zip; \
     mkdir -p /app/modules; \
     rm -rf /app/modules/Starter26; \
@@ -59,50 +51,103 @@ RUN set -eux; \
         mv /tmp/starter26-install /app/modules/Starter26; \
     else \
         echo "ERROR: Starter26 module.json was not found inside ZIP"; \
-        find /tmp/starter26-install -maxdepth 5 -type f | sort; \
+        find /tmp/starter26-install -maxdepth 4 -type f | sort; \
         exit 1; \
     fi; \
-    rm -f /app/starter26-v1.0.4.zip
+    rm -rf /tmp/starter26-install; \
+    rm -f /app/starter26-v1.0.4.zip; \
+    test -f /app/modules/Starter26/module.json; \
+    echo ""; \
+    echo "STARTER26 INSTALLED SUCCESSFULLY"; \
+    cat /app/modules/Starter26/module.json
 
-# ------------------------------------------------------------------------------
-# Verify Starter26
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# INSTALL FORUM MODULE
+# ==============================================================================
 
 RUN set -eux; \
+    echo ""; \
+    echo "=================================================="; \
+    echo "INSTALLING FORUM"; \
+    echo "=================================================="; \
+    test -f /app/forum-v0.1.3.zip; \
+    mkdir -p /app/modules; \
+    rm -rf /app/modules/Forum; \
+    mkdir -p /tmp/forum-install; \
+    unzip -q /app/forum-v0.1.3.zip -d /tmp/forum-install; \
+    if [ -f /tmp/forum-install/Forum/module.json ]; then \
+        mv /tmp/forum-install/Forum /app/modules/Forum; \
+    elif [ -f /tmp/forum-install/module.json ]; then \
+        mv /tmp/forum-install /app/modules/Forum; \
+    else \
+        echo "ERROR: Forum module.json was not found inside ZIP"; \
+        find /tmp/forum-install -maxdepth 5 -type f | sort; \
+        exit 1; \
+    fi; \
+    rm -rf /tmp/forum-install; \
+    rm -f /app/forum-v0.1.3.zip; \
+    test -f /app/modules/Forum/module.json; \
+    echo ""; \
+    echo "FORUM INSTALLED SUCCESSFULLY"; \
+    cat /app/modules/Forum/module.json
+
+# ==============================================================================
+# VERIFY BOTH MODULES
+# ==============================================================================
+
+RUN set -eux; \
+    echo ""; \
+    echo "=================================================="; \
+    echo "VERIFYING MODULES"; \
+    echo "=================================================="; \
     test -f /app/modules/Starter26/module.json; \
     test -f /app/modules/Starter26/app/Providers/Starter26ServiceProvider.php; \
-    test -f /app/modules/Starter26/app/Providers/Starter26LivewireServiceProvider.php; \
-    test -f /app/modules/Starter26/dist/build-starter26/manifest.json; \
-    echo "=================================================="; \
-    echo "STARTER26 MODULE FOUND"; \
-    echo "=================================================="; \
-    cat /app/modules/Starter26/module.json; \
-    echo "=================================================="; \
-    echo "STARTER26 PRODUCTION VITE MANIFEST FOUND"; \
-    echo "=================================================="; \
-    cat /app/modules/Starter26/dist/build-starter26/manifest.json
+    test -f /app/modules/Forum/module.json; \
+    test -f /app/modules/Forum/app/Providers/ForumServiceProvider.php; \
+    test -f /app/modules/Forum/app/Providers/LivewireServiceProvider.php; \
+    test -f /app/modules/Forum/app/Providers/RouteServiceProvider.php; \
+    echo ""; \
+    echo "STARTER26 FILES:"; \
+    find /app/modules/Starter26 -maxdepth 3 -type f | sort; \
+    echo ""; \
+    echo "FORUM FILES:"; \
+    find /app/modules/Forum -maxdepth 3 -type f | sort
 
-# ------------------------------------------------------------------------------
-# IMPORTANT:
-# The Starter26 ZIP already contains its compiled production Vite assets.
-#
-# Laravel expects:
-# public/build-starter26/manifest.json
-#
-# The ZIP contains:
-# modules/Starter26/dist/build-starter26/manifest.json
-#
-# Copy the packaged production build into Laravel's public directory.
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# PREPARE FORUM PRODUCTION ASSETS
+# ==============================================================================
 
 RUN set -eux; \
-    mkdir -p /app/public/build-starter26; \
-    cp -R /app/modules/Starter26/dist/build-starter26/. /app/public/build-starter26/; \
-    test -f /app/public/build-starter26/manifest.json; \
+    echo ""; \
     echo "=================================================="; \
-    echo "PUBLIC STARTER26 VITE BUILD"; \
+    echo "PREPARING FORUM VITE ASSETS"; \
     echo "=================================================="; \
-    find /app/public/build-starter26 -maxdepth 2 -type f | sort
+    test -f /app/modules/Forum/dist/build-forum/manifest.json; \
+    mkdir -p /app/public/build-forum; \
+    rm -rf /app/public/build-forum/*; \
+    cp -R /app/modules/Forum/dist/build-forum/. /app/public/build-forum/; \
+    echo ""; \
+    echo "FORUM VITE MANIFEST:"; \
+    cat /app/public/build-forum/manifest.json; \
+    echo ""; \
+    echo "FORUM VITE ASSETS:"; \
+    find /app/public/build-forum -maxdepth 3 -type f | sort
+
+# ==============================================================================
+# PREPARE FORUM LOGO
+# ==============================================================================
+
+RUN set -eux; \
+    echo ""; \
+    echo "=================================================="; \
+    echo "PREPARING FORUM LOGO"; \
+    echo "=================================================="; \
+    test -f /app/modules/Forum/marketplace-assets/logo.svg; \
+    mkdir -p /app/public/images/modules/forum; \
+    cp /app/modules/Forum/marketplace-assets/logo.svg \
+       /app/public/images/modules/forum/logo.svg; \
+    test -f /app/public/images/modules/forum/logo.svg; \
+    echo "Forum logo installed."
 
 # ==============================================================================
 # COMPOSER
@@ -121,24 +166,32 @@ RUN composer dump-autoload \
     --no-interaction
 
 # ==============================================================================
-# NOTE
-#
-# Do NOT run "npm run build" here.
-#
-# Starter26 v1.0.4 already contains:
-#
-# modules/Starter26/dist/build-starter26/manifest.json
-#
-# and its compiled CSS/JS files.
-#
-# We copied those files into:
-#
-# public/build-starter26/
-#
-# which is exactly where Laravel @vite(..., 'build-starter26')
-# expects them.
+# FRONTEND
 # ==============================================================================
 
+RUN npm ci
+
+RUN npm run build
+
+# ==============================================================================
+# FINAL VITE VERIFICATION
+# ==============================================================================
+
+RUN set -eux; \
+    echo ""; \
+    echo "=================================================="; \
+    echo "FINAL VITE VERIFICATION"; \
+    echo "=================================================="; \
+    echo ""; \
+    echo "Starter26 build:"; \
+    test -f /app/public/build-starter26/manifest.json; \
+    cat /app/public/build-starter26/manifest.json; \
+    echo ""; \
+    echo "Forum build:"; \
+    test -f /app/public/build-forum/manifest.json; \
+    cat /app/public/build-forum/manifest.json; \
+    echo ""; \
+    echo "Both Vite manifests exist."
 
 # ==============================================================================
 # STAGE 2: PRODUCTION
@@ -162,7 +215,7 @@ RUN apk add --no-cache \
 # PHP EXTENSIONS
 # ==============================================================================
 
-COPY --from=mlocati/php-extension-installer:latest \
+COPY --from=mlocati/php-extension-installer \
     /usr/bin/install-php-extensions \
     /usr/local/bin/install-php-extensions
 
@@ -219,10 +272,12 @@ RUN mkdir -p \
     /var/www/html/storage/framework/views \
     /var/www/html/storage/logs \
     /var/www/html/bootstrap/cache \
-    /var/www/html/public/build-starter26
+    /var/www/html/public/build-starter26 \
+    /var/www/html/public/build-forum \
+    /var/www/html/public/images/modules/forum
 
 # ==============================================================================
-# FILE OWNERSHIP / PERMISSIONS
+# FIX FILE OWNERSHIP / PERMISSIONS
 # ==============================================================================
 
 RUN chown -R www-data:www-data /var/www/html \
@@ -232,29 +287,45 @@ RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/bootstrap/cache \
     && chmod +x /var/www/html/artisan
 
-# ------------------------------------------------------------------------------
-# Verify Starter26 after copy and permissions
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# VERIFY STARTER26
+# ==============================================================================
 
 RUN set -eux; \
-    test -f /var/www/html/modules/Starter26/module.json; \
-    test -f /var/www/html/modules/Starter26/app/Providers/Starter26ServiceProvider.php; \
-    test -f /var/www/html/modules/Starter26/app/Providers/Starter26LivewireServiceProvider.php; \
-    test -f /var/www/html/modules/Starter26/dist/build-starter26/manifest.json; \
-    test -f /var/www/html/public/build-starter26/manifest.json; \
+    echo ""; \
     echo "=================================================="; \
     echo "FINAL STARTER26 CHECK"; \
     echo "=================================================="; \
-    ls -la /var/www/html/modules/Starter26; \
-    echo "--------------------------------------------------"; \
-    echo "Starter26 providers:"; \
-    ls -la /var/www/html/modules/Starter26/app/Providers; \
-    echo "--------------------------------------------------"; \
-    echo "Public Vite build:"; \
-    ls -la /var/www/html/public/build-starter26; \
-    echo "--------------------------------------------------"; \
-    echo "Vite manifest:"; \
-    cat /var/www/html/public/build-starter26/manifest.json
+    test -f /var/www/html/modules/Starter26/module.json; \
+    test -f /var/www/html/modules/Starter26/app/Providers/Starter26ServiceProvider.php; \
+    test -f /var/www/html/modules/Starter26/app/Providers/Starter26LivewireServiceProvider.php; \
+    test -f /var/www/html/public/build-starter26/manifest.json; \
+    echo "Starter26 module: FOUND"; \
+    echo "Starter26 Vite manifest: FOUND"
+
+# ==============================================================================
+# VERIFY FORUM
+# ==============================================================================
+
+RUN set -eux; \
+    echo ""; \
+    echo "=================================================="; \
+    echo "FINAL FORUM CHECK"; \
+    echo "=================================================="; \
+    test -f /var/www/html/modules/Forum/module.json; \
+    test -f /var/www/html/modules/Forum/app/Providers/ForumServiceProvider.php; \
+    test -f /var/www/html/modules/Forum/app/Providers/LivewireServiceProvider.php; \
+    test -f /var/www/html/modules/Forum/app/Providers/RouteServiceProvider.php; \
+    test -f /var/www/html/modules/Forum/database/migrations/2026_02_14_182041_create_forum_categories_table.php; \
+    test -f /var/www/html/modules/Forum/database/migrations/2026_02_14_182047_create_forum_topics_table.php; \
+    test -f /var/www/html/modules/Forum/database/migrations/2026_02_14_182051_create_forum_replies_table.php; \
+    test -f /var/www/html/modules/Forum/database/migrations/2026_02_14_182104_create_forum_likes_table.php; \
+    test -f /var/www/html/public/build-forum/manifest.json; \
+    test -f /var/www/html/public/images/modules/forum/logo.svg; \
+    echo "Forum module: FOUND"; \
+    echo "Forum migrations: FOUND"; \
+    echo "Forum Vite manifest: FOUND"; \
+    echo "Forum logo: FOUND"
 
 # ==============================================================================
 # NGINX
@@ -394,6 +465,7 @@ fi
 # PERMISSIONS
 # ==============================================================================
 
+echo ""
 echo "Applying Laravel permissions..."
 
 chown -R www-data:www-data \
@@ -402,12 +474,6 @@ chown -R www-data:www-data \
 
 find /var/www/html/modules -type d -exec chmod 755 {} \;
 find /var/www/html/modules -type f -exec chmod 644 {} \;
-
-find /var/www/html/app -type d -exec chmod 755 {} \; 2>/dev/null || true
-find /var/www/html/app -type f -exec chmod 644 {} \; 2>/dev/null || true
-
-find /var/www/html/public/build-starter26 -type d -exec chmod 755 {} \;
-find /var/www/html/public/build-starter26 -type f -exec chmod 644 {} \;
 
 chmod -R 775 /var/www/html/storage
 chmod -R 775 /var/www/html/bootstrap/cache
@@ -428,41 +494,45 @@ if [ ! -f /var/www/html/modules/Starter26/module.json ]; then
     exit 1
 fi
 
-echo "Starter26 module: FOUND"
-
-if [ ! -f /var/www/html/modules/Starter26/app/Providers/Starter26ServiceProvider.php ]; then
-    echo "ERROR: Starter26ServiceProvider.php is missing."
-    exit 1
-fi
-
-if [ ! -f /var/www/html/modules/Starter26/app/Providers/Starter26LivewireServiceProvider.php ]; then
-    echo "ERROR: Starter26LivewireServiceProvider.php is missing."
-    exit 1
-fi
-
-echo "Starter26 providers: FOUND"
-
-# ==============================================================================
-# STARTER26 VITE CHECK
-# ==============================================================================
-
-echo ""
-echo "=================================================="
-echo "STARTER26 VITE ASSETS"
-echo "=================================================="
-
 if [ ! -f /var/www/html/public/build-starter26/manifest.json ]; then
     echo "ERROR: Starter26 Vite manifest is missing."
-    echo "Expected:"
-    echo "/var/www/html/public/build-starter26/manifest.json"
     exit 1
 fi
 
+echo "Starter26 module: FOUND"
 echo "Starter26 Vite manifest: FOUND"
 
+# ==============================================================================
+# FORUM CHECK
+# ==============================================================================
+
 echo ""
-echo "Starter26 Vite files:"
-find /var/www/html/public/build-starter26 -maxdepth 2 -type f | sort
+echo "=================================================="
+echo "FORUM CHECK"
+echo "=================================================="
+
+if [ ! -f /var/www/html/modules/Forum/module.json ]; then
+    echo "ERROR: Forum module is missing."
+    exit 1
+fi
+
+if [ ! -f /var/www/html/public/build-forum/manifest.json ]; then
+    echo "ERROR: Forum Vite manifest is missing."
+    exit 1
+fi
+
+if [ ! -f /var/www/html/public/images/modules/forum/logo.svg ]; then
+    echo "ERROR: Forum logo is missing."
+    exit 1
+fi
+
+echo "Forum module: FOUND"
+echo "Forum Vite manifest: FOUND"
+echo "Forum logo: FOUND"
+
+echo ""
+echo "Forum providers:"
+ls -la /var/www/html/modules/Forum/app/Providers
 
 # ==============================================================================
 # CLEAR CACHES
@@ -483,6 +553,28 @@ echo "MODULE STATUS"
 echo "=================================================="
 
 php artisan module:list || true
+
+# ==============================================================================
+# RUN DATABASE MIGRATIONS
+# ==============================================================================
+
+echo ""
+echo "=================================================="
+echo "RUNNING DATABASE MIGRATIONS"
+echo "=================================================="
+
+php artisan migrate --force
+
+# ==============================================================================
+# FORUM ROUTES
+# ==============================================================================
+
+echo ""
+echo "=================================================="
+echo "FORUM ROUTES"
+echo "=================================================="
+
+php artisan route:list 2>/dev/null | grep -E 'forum|admin.forum' || true
 
 # ==============================================================================
 # STARTER26 ROUTES
@@ -544,18 +636,28 @@ chmod -R 775 \
     /var/www/html/bootstrap/cache
 
 # ==============================================================================
-# FINAL VITE CHECK
+# FINAL ASSET CHECK
 # ==============================================================================
 
 echo ""
 echo "=================================================="
-echo "FINAL VITE CHECK"
+echo "FINAL ASSET CHECK"
 echo "=================================================="
 
-test -f /var/www/html/public/build-starter26/manifest.json
-
 echo "Starter26 manifest:"
-cat /var/www/html/public/build-starter26/manifest.json
+ls -lh /var/www/html/public/build-starter26/manifest.json
+
+echo ""
+echo "Forum manifest:"
+ls -lh /var/www/html/public/build-forum/manifest.json
+
+echo ""
+echo "Forum logo:"
+ls -lh /var/www/html/public/images/modules/forum/logo.svg
+
+# ==============================================================================
+# START
+# ==============================================================================
 
 echo ""
 echo "=================================================="
@@ -575,3 +677,4 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 EXPOSE 80
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+```
