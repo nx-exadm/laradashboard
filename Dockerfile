@@ -23,13 +23,13 @@ COPY . .
 # INSTALL STARTER26 MODULE
 # ==============================================================================
 
-RUN test -f /app/starter26-v1.0.4.zip && mkdir -p /app/modules && rm -rf /app/modules/Starter26 /tmp/starter26-install && mkdir -p /tmp/starter26-install && unzip -q /app/starter26-v1.0.4.zip -d /tmp/starter26-install && if [ -f /tmp/starter26-install/Starter26/module.json ]; then mv /tmp/starter26-install/Starter26 /app/modules/Starter26; elif [ -f /tmp/starter26-install/module.json ]; then mv /tmp/starter26-install /app/modules/Starter26; else echo "ERROR: Starter26 module.json not found"; find /tmp/starter26-install -maxdepth 4 -type f | sort; exit 1; fi && rm -rf /tmp/starter26-install /app/starter26-v1.0.4.zip
+RUN test -f /app/starter26-v1.0.4.zip && mkdir -p /app/modules && rm -rf /app/modules/Starter26 /app/modules/starter26 /tmp/starter26-install && mkdir -p /tmp/starter26-install && unzip -q /app/starter26-v1.0.4.zip -d /tmp/starter26-install && if [ -f /tmp/starter26-install/Starter26/module.json ]; then mv /tmp/starter26-install/Starter26 /app/modules/Starter26; elif [ -f /tmp/starter26-install/module.json ]; then mv /tmp/starter26-install /app/modules/Starter26; else echo "ERROR: Starter26 module.json not found"; find /tmp/starter26-install -maxdepth 4 -type f | sort; exit 1; fi && rm -rf /tmp/starter26-install /app/starter26-v1.0.4.zip && ln -s Starter26 /app/modules/starter26
 
 # ==============================================================================
 # INSTALL FORUM MODULE
 # ==============================================================================
 
-RUN test -f /app/forum-v0.1.3.zip && mkdir -p /app/modules && rm -rf /app/modules/Forum /tmp/forum-install && mkdir -p /tmp/forum-install && unzip -q /app/forum-v0.1.3.zip -d /tmp/forum-install && if [ -f /tmp/forum-install/Forum/module.json ]; then mv /tmp/forum-install/Forum /app/modules/Forum; elif [ -f /tmp/forum-install/module.json ]; then mv /tmp/forum-install /app/modules/Forum; else echo "ERROR: Forum module.json not found"; find /tmp/forum-install -maxdepth 4 -type f | sort; exit 1; fi && rm -rf /tmp/forum-install /app/forum-v0.1.3.zip
+RUN test -f /app/forum-v0.1.3.zip && mkdir -p /app/modules && rm -rf /app/modules/Forum /app/modules/forum /tmp/forum-install && mkdir -p /tmp/forum-install && unzip -q /app/forum-v0.1.3.zip -d /tmp/forum-install && if [ -f /tmp/forum-install/Forum/module.json ]; then mv /tmp/forum-install/Forum /app/modules/Forum; elif [ -f /tmp/forum-install/module.json ]; then mv /tmp/forum-install /app/modules/Forum; else echo "ERROR: Forum module.json not found"; find /tmp/forum-install -maxdepth 4 -type f | sort; exit 1; fi && rm -rf /tmp/forum-install /app/forum-v0.1.3.zip && ln -s Forum /app/modules/forum
 
 # ==============================================================================
 # VERIFY MODULES
