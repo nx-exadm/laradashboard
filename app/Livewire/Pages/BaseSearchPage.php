@@ -1,3 +1,4 @@
+```php
 <?php
 
 declare(strict_types=1);
@@ -22,22 +23,47 @@ abstract class BaseSearchPage extends BaseFrontendPage
     }
 
     /**
-     * Get paginated search results.
+     * Get paginated published page search results.
+     *
+     * Search is performed against:
+     * - Page title
+     * - Page meta description/excerpt
+     *
+     * The page content is intentionally NOT searched or returned.
      */
     public function getResultsProperty(): ?LengthAwarePaginator
     {
-        if (! class_exists(Post::class) || empty($this->query)) {
+        $query = trim($this->query);
+
+        if ($query === '') {
             return null;
         }
 
-        return $this->query()->paginatePosts(
-            $this->query()->searchPosts($this->query)
-        );
+        return Post::query()
+            ->where('post_type', 'page')
+            ->where('status', 'published')
+            ->where(function ($builder) use ($query) {
+                $builder
+                    ->where('title', 'like', '%' . $query . '%')
+                    ->orWhere('excerpt', 'like', '%' . $query . '%');
+            })
+            ->select([
+                'id',
+                'title',
+                'slug',
+                'excerpt',
+            ])
+            ->orderBy('title')
+            ->paginate(12);
     }
 
+    /**
+     * Clear the current search.
+     */
     public function clearSearch(): void
     {
         $this->query = '';
         $this->resetPage();
     }
 }
+```
