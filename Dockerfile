@@ -41,7 +41,7 @@ RUN test -f /app/forum-v0.1.3.zip && mkdir -p /app/modules && rm -rf /app/module
 # npm/vite below -- see the CUSTOMFORM ASSETS step further down.
 # ==============================================================================
 
-RUN test -f /app/customform-v1_0_4.zip && mkdir -p /app/modules && rm -rf /app/modules/CustomForm /app/modules/customform /tmp/customform-install && mkdir -p /tmp/customform-install && unzip -q /app/customform-v1_0_4.zip -d /tmp/customform-install && if [ -f /tmp/customform-install/CustomForm/module.json ]; then mv /tmp/customform-install/CustomForm /app/modules/CustomForm; elif [ -f /tmp/customform-install/module.json ]; then mv /tmp/customform-install /app/modules/CustomForm; else echo "ERROR: CustomForm module.json not found"; find /tmp/customform-install -maxdepth 4 -type f | sort; exit 1; fi && rm -rf /tmp/customform-install /app/customform-v1_0_4.zip && ln -s CustomForm /app/modules/customform
+RUN test -f /app/customform-v1.0.4.zip && mkdir -p /app/modules && rm -rf /app/modules/CustomForm /app/modules/customform /tmp/customform-install && mkdir -p /tmp/customform-install && unzip -q /app/customform-v1.0.4.zip -d /tmp/customform-install && if [ -f /tmp/customform-install/CustomForm/module.json ]; then mv /tmp/customform-install/CustomForm /app/modules/CustomForm; elif [ -f /tmp/customform-install/module.json ]; then mv /tmp/customform-install /app/modules/CustomForm; else echo "ERROR: CustomForm module.json not found"; find /tmp/customform-install -maxdepth 4 -type f | sort; exit 1; fi && rm -rf /tmp/customform-install /app/customform-v1.0.4.zip && ln -s CustomForm /app/modules/customform
 
 # ==============================================================================
 # VERIFY MODULES
