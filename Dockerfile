@@ -1,5 +1,5 @@
 # ==============================================================================
-# LARADASHBOARD + STARTER26 + FORUM
+# LARADASHBOARD + STARTER26 + FORUM + CUSTOMFORM
 # Production Docker image for Render
 # ==============================================================================
 
@@ -32,13 +32,29 @@ RUN test -f /app/starter26-v1.0.4.zip && mkdir -p /app/modules && rm -rf /app/mo
 RUN test -f /app/forum-v0.1.3.zip && mkdir -p /app/modules && rm -rf /app/modules/Forum /app/modules/forum /tmp/forum-install && mkdir -p /tmp/forum-install && unzip -q /app/forum-v0.1.3.zip -d /tmp/forum-install && if [ -f /tmp/forum-install/Forum/module.json ]; then mv /tmp/forum-install/Forum /app/modules/Forum; elif [ -f /tmp/forum-install/module.json ]; then mv /tmp/forum-install /app/modules/Forum; else echo "ERROR: Forum module.json not found"; find /tmp/forum-install -maxdepth 4 -type f | sort; exit 1; fi && rm -rf /tmp/forum-install /app/forum-v0.1.3.zip && ln -s Forum /app/modules/forum
 
 # ==============================================================================
+# INSTALL CUSTOMFORM MODULE
+#
+# NOTE: this module ships with precompiled Vite assets
+# (.module-manifest.json: has_precompiled_assets=true, requires_npm_build=false)
+# and its own bundled vendor/autoload.php (self-contained module, loaded by
+# CustomFormServiceProvider::register()). It is intentionally NOT built with
+# npm/vite below -- see the CUSTOMFORM ASSETS step further down.
+# ==============================================================================
+
+RUN test -f /app/customform-v1_0_4.zip && mkdir -p /app/modules && rm -rf /app/modules/CustomForm /app/modules/customform /tmp/customform-install && mkdir -p /tmp/customform-install && unzip -q /app/customform-v1_0_4.zip -d /tmp/customform-install && if [ -f /tmp/customform-install/CustomForm/module.json ]; then mv /tmp/customform-install/CustomForm /app/modules/CustomForm; elif [ -f /tmp/customform-install/module.json ]; then mv /tmp/customform-install /app/modules/CustomForm; else echo "ERROR: CustomForm module.json not found"; find /tmp/customform-install -maxdepth 4 -type f | sort; exit 1; fi && rm -rf /tmp/customform-install /app/customform-v1_0_4.zip && ln -s CustomForm /app/modules/customform
+
+# ==============================================================================
 # VERIFY MODULES
 # ==============================================================================
 
-RUN test -f /app/modules/Starter26/module.json && test -f /app/modules/Forum/module.json && echo "===== STARTER26 =====" && cat /app/modules/Starter26/module.json && echo "===== FORUM =====" && cat /app/modules/Forum/module.json
+RUN test -f /app/modules/Starter26/module.json && test -f /app/modules/Forum/module.json && test -f /app/modules/CustomForm/module.json && echo "===== STARTER26 =====" && cat /app/modules/Starter26/module.json && echo "===== FORUM =====" && cat /app/modules/Forum/module.json && echo "===== CUSTOMFORM =====" && cat /app/modules/CustomForm/module.json
 
 # ==============================================================================
 # COMPOSER
+#
+# Module composer.json files (including CustomForm's) are merged into the
+# root autoloader here, so modules must already be extracted into /app/modules
+# before this step runs -- they are (see steps above).
 # ==============================================================================
 
 COPY --from=composer:2.7 /usr/bin/composer /usr/local/bin/composer
@@ -80,6 +96,28 @@ RUN cd /app && MODULE_DIST_BUILD=true /app/modules/Starter26/node_modules/.bin/v
 RUN cd /app && MODULE_DIST_BUILD=true /app/modules/Forum/node_modules/.bin/vite build --config /app/modules/Forum/vite.config.js
 
 # ==============================================================================
+# CUSTOMFORM ASSETS
+#
+# We deliberately do NOT run "npm install && vite build" for this module.
+# Its vite.config.js imports "@tailwindcss/vite" and "@vitejs/plugin-react",
+# but neither package is declared in the module's package.json /
+# package-lock.json -- running a build here would fail with a
+# "Cannot find module '@tailwindcss/vite'" error.
+#
+# The module ships precompiled assets in dist/build-customform (confirmed by
+# its own .module-manifest.json: requires_npm_build=false), so we just copy
+# those straight into the Laravel public directory, same destination a Vite
+# build would have produced.
+#
+# If you later change the module's frontend source and need to rebuild it,
+# first add the two missing devDependencies to modules/CustomForm/package.json:
+#   "@tailwindcss/vite": "^4.0.0"
+#   "@vitejs/plugin-react": "^4.0.0"
+# ==============================================================================
+
+RUN mkdir -p /app/public/build-customform && cp -a /app/modules/CustomForm/dist/build-customform/. /app/public/build-customform/
+
+# ==============================================================================
 # COPY MODULE BUILDS INTO LARAVEL PUBLIC DIRECTORY
 # ==============================================================================
 
@@ -89,7 +127,7 @@ RUN mkdir -p /app/public/build-starter26 /app/public/build-forum && cp -a /app/m
 # VERIFY VITE MANIFESTS
 # ==============================================================================
 
-RUN test -f /app/public/build-starter26/manifest.json && test -f /app/public/build-forum/manifest.json && echo "===== STARTER26 MANIFEST =====" && cat /app/public/build-starter26/manifest.json && echo "===== FORUM MANIFEST =====" && cat /app/public/build-forum/manifest.json
+RUN test -f /app/public/build-starter26/manifest.json && test -f /app/public/build-forum/manifest.json && test -f /app/public/build-customform/manifest.json && echo "===== STARTER26 MANIFEST =====" && cat /app/public/build-starter26/manifest.json && echo "===== FORUM MANIFEST =====" && cat /app/public/build-forum/manifest.json && echo "===== CUSTOMFORM MANIFEST =====" && cat /app/public/build-customform/manifest.json
 
 # ==============================================================================
 # PRODUCTION STAGE
@@ -152,7 +190,7 @@ RUN chown -R www-data:www-data /var/www/html && find /var/www/html -type d -exec
 # FINAL MODULE CHECK
 # ==============================================================================
 
-RUN test -f /var/www/html/modules/Starter26/module.json && test -f /var/www/html/modules/Forum/module.json && test -f /var/www/html/modules/Starter26/app/Providers/Starter26ServiceProvider.php && test -f /var/www/html/modules/Forum/app/Providers/ForumServiceProvider.php && test -f /var/www/html/public/build-starter26/manifest.json && test -f /var/www/html/public/build-forum/manifest.json && echo "==================================================" && echo "FINAL MODULE CHECK PASSED" && echo "Starter26: OK" && echo "Forum: OK" && echo "Starter26 Vite manifest: OK" && echo "Forum Vite manifest: OK" && echo "=================================================="
+RUN test -f /var/www/html/modules/Starter26/module.json && test -f /var/www/html/modules/Forum/module.json && test -f /var/www/html/modules/CustomForm/module.json && test -f /var/www/html/modules/Starter26/app/Providers/Starter26ServiceProvider.php && test -f /var/www/html/modules/Forum/app/Providers/ForumServiceProvider.php && test -f /var/www/html/modules/CustomForm/app/Providers/CustomFormServiceProvider.php && test -f /var/www/html/public/build-starter26/manifest.json && test -f /var/www/html/public/build-forum/manifest.json && test -f /var/www/html/public/build-customform/manifest.json && echo "==================================================" && echo "FINAL MODULE CHECK PASSED" && echo "Starter26: OK" && echo "Forum: OK" && echo "CustomForm: OK" && echo "Starter26 Vite manifest: OK" && echo "Forum Vite manifest: OK" && echo "CustomForm Vite manifest: OK" && echo "=================================================="
 
 # ==============================================================================
 # NGINX
@@ -324,8 +362,14 @@ if [ ! -f /var/www/html/modules/Forum/module.json ]; then
     exit 1
 fi
 
+if [ ! -f /var/www/html/modules/CustomForm/module.json ]; then
+    echo "ERROR: CustomForm module is missing."
+    exit 1
+fi
+
 echo "Starter26 module: FOUND"
 echo "Forum module: FOUND"
+echo "CustomForm module: FOUND"
 
 # ==============================================================================
 # VITE CHECK
@@ -346,8 +390,14 @@ if [ ! -f /var/www/html/public/build-forum/manifest.json ]; then
     exit 1
 fi
 
+if [ ! -f /var/www/html/public/build-customform/manifest.json ]; then
+    echo "ERROR: CustomForm Vite manifest is missing."
+    exit 1
+fi
+
 echo "Starter26 manifest: FOUND"
 echo "Forum manifest: FOUND"
+echo "CustomForm manifest: FOUND"
 
 # ==============================================================================
 # CLEAR CACHES
@@ -357,6 +407,25 @@ echo ""
 echo "Clearing Laravel caches..."
 
 php artisan optimize:clear
+
+# ==============================================================================
+# ENABLE MODULES
+#
+# modules_statuses.json in the repo does not have Forum or CustomForm marked
+# enabled, so Laravel never registers their service providers, routes, or
+# migrations -- this is why the Forum seeder previously failed with
+# "Target class [Modules\Forum\Database\Seeders\ForumDatabaseSeeder] does not
+# exist." We explicitly enable both modules here on every boot. This is
+# idempotent and safe to run repeatedly.
+# ==============================================================================
+
+echo ""
+echo "=================================================="
+echo "ENABLING MODULES"
+echo "=================================================="
+
+php artisan module:enable Forum || true
+php artisan module:enable CustomForm || true
 
 # ==============================================================================
 # MODULE STATUS
@@ -373,10 +442,11 @@ php artisan module:list || true
 # DATABASE MIGRATIONS
 #
 # Forum migrations are loaded by ForumServiceProvider.
+# CustomForm migrations are loaded by CustomFormServiceProvider.
 # We intentionally do NOT use migrate:fresh because that would destroy data.
 #
 # migrate --force is safe for existing production databases and will create
-# the Forum tables when the Forum module is installed.
+# the Forum / CustomForm tables when those modules are installed.
 # ==============================================================================
 
 echo ""
@@ -404,6 +474,21 @@ echo "=================================================="
 php artisan db:seed --class="Modules\Forum\Database\Seeders\ForumDatabaseSeeder" --force || true
 
 # ==============================================================================
+# CUSTOMFORM SEEDER
+#
+# Mirrors the Forum seeder pattern above. The CustomForm seeder should be
+# written to be safe for repeated deployment (e.g. idempotent permission /
+# default-record creation).
+# ==============================================================================
+
+echo ""
+echo "=================================================="
+echo "CUSTOMFORM DATABASE SETUP"
+echo "=================================================="
+
+php artisan db:seed --class="Modules\CustomForm\Database\Seeders\CustomFormDatabaseSeeder" --force || true
+
+# ==============================================================================
 # ROUTES
 # ==============================================================================
 
@@ -420,6 +505,14 @@ echo "FORUM ROUTES"
 echo "=================================================="
 
 php artisan route:list 2>/dev/null | grep -i forum || true
+
+echo ""
+echo "=================================================="
+echo "CUSTOMFORM ROUTES"
+echo "=================================================="
+
+php artisan route:list 2>/dev/null | grep -i custom-form || true
+php artisan route:list 2>/dev/null | grep -i customform || true
 
 # ==============================================================================
 # CONFIG CACHE
@@ -475,8 +568,10 @@ echo "LARADASHBOARD READY"
 echo "=================================================="
 echo "Starter26: INSTALLED"
 echo "Forum: INSTALLED"
+echo "CustomForm: INSTALLED"
 echo "Starter26 assets: BUILT"
 echo "Forum assets: BUILT"
+echo "CustomForm assets: BUILT"
 echo "Database migrations: COMPLETE"
 echo "Nginx: READY"
 echo "PHP-FPM: READY"
