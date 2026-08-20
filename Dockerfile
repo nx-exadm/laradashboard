@@ -137,17 +137,22 @@ FROM php:8.3-fpm-alpine
 
 # ==============================================================================
 # RUNTIME PACKAGES
+#
+# NOTE: "sqlite" added here (SQLite support) alongside the existing packages.
 # ==============================================================================
 
-RUN apk add --no-cache nginx supervisor bash postgresql-client mariadb-client unzip
+RUN apk add --no-cache nginx supervisor bash postgresql-client mariadb-client unzip sqlite
 
 # ==============================================================================
 # PHP EXTENSIONS
+#
+# NOTE: "pdo_sqlite sqlite3" added here (SQLite support) alongside the
+# existing pdo_mysql / pdo_pgsql extensions.
 # ==============================================================================
 
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/install-php-extensions
 
-RUN chmod +x /usr/local/bin/install-php-extensions && install-php-extensions pdo_mysql pdo_pgsql gd zip bcmath opcache mbstring openssl tokenizer xml ctype json fileinfo curl
+RUN chmod +x /usr/local/bin/install-php-extensions && install-php-extensions pdo_mysql pdo_pgsql pdo_sqlite sqlite3 gd zip bcmath opcache mbstring openssl tokenizer xml ctype json fileinfo curl
 
 # ==============================================================================
 # PHP CONFIGURATION
@@ -437,6 +442,25 @@ echo "MODULE STATUS"
 echo "=================================================="
 
 php artisan module:list || true
+
+# ==============================================================================
+# SQLITE DATABASE FILE
+#
+# NOTE: added for SQLite support. If DB_CONNECTION is set to "sqlite", make
+# sure the database file exists and is writable by www-data before migrations
+# run. Harmless no-op for MySQL/Postgres connections.
+# ==============================================================================
+
+if [ "${DB_CONNECTION:-}" = "sqlite" ]; then
+    echo ""
+    echo "=================================================="
+    echo "SQLITE DATABASE SETUP"
+    echo "=================================================="
+    mkdir -p /var/www/html/database
+    touch /var/www/html/database/database.sqlite
+    chown www-data:www-data /var/www/html/database/database.sqlite
+    echo "SQLite database file ready at /var/www/html/database/database.sqlite"
+fi
 
 # ==============================================================================
 # DATABASE MIGRATIONS
