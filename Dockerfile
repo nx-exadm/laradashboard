@@ -138,21 +138,22 @@ FROM php:8.3-fpm-alpine
 # ==============================================================================
 # RUNTIME PACKAGES
 #
-# NOTE: "sqlite" added here (SQLite support) alongside the existing packages.
+# NOTE: postgresql-client and mariadb-client removed -- SQLite only now.
+# "sqlite" added for SQLite support.
 # ==============================================================================
 
-RUN apk add --no-cache nginx supervisor bash postgresql-client mariadb-client unzip sqlite
+RUN apk add --no-cache nginx supervisor bash unzip sqlite
 
 # ==============================================================================
 # PHP EXTENSIONS
 #
-# NOTE: "pdo_sqlite sqlite3" added here (SQLite support) alongside the
-# existing pdo_mysql / pdo_pgsql extensions.
+# NOTE: pdo_mysql and pdo_pgsql removed -- SQLite only now.
+# pdo_sqlite and sqlite3 added for SQLite support.
 # ==============================================================================
 
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/install-php-extensions
 
-RUN chmod +x /usr/local/bin/install-php-extensions && install-php-extensions pdo_mysql pdo_pgsql pdo_sqlite sqlite3 gd zip bcmath opcache mbstring openssl tokenizer xml ctype json fileinfo curl
+RUN chmod +x /usr/local/bin/install-php-extensions && install-php-extensions pdo_sqlite sqlite3 gd zip bcmath opcache mbstring openssl tokenizer xml ctype json fileinfo curl
 
 # ==============================================================================
 # PHP CONFIGURATION
