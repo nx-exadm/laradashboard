@@ -415,36 +415,6 @@ echo "Clearing Laravel caches..."
 php artisan optimize:clear
 
 # ==============================================================================
-# ENABLE MODULES
-#
-# modules_statuses.json in the repo does not have Forum or CustomForm marked
-# enabled, so Laravel never registers their service providers, routes, or
-# migrations -- this is why the Forum seeder previously failed with
-# "Target class [Modules\Forum\Database\Seeders\ForumDatabaseSeeder] does not
-# exist." We explicitly enable both modules here on every boot. This is
-# idempotent and safe to run repeatedly.
-# ==============================================================================
-
-echo ""
-echo "=================================================="
-echo "ENABLING MODULES"
-echo "=================================================="
-
-php artisan module:enable Forum || true
-php artisan module:enable CustomForm || true
-
-# ==============================================================================
-# MODULE STATUS
-# ==============================================================================
-
-echo ""
-echo "=================================================="
-echo "MODULE STATUS"
-echo "=================================================="
-
-php artisan module:list || true
-
-# ==============================================================================
 # SQLITE DATABASE FILE
 #
 # NOTE: added for SQLite support. If DB_CONNECTION is set to "sqlite", make
@@ -471,7 +441,10 @@ fi
 # We intentionally do NOT use migrate:fresh because that would destroy data.
 #
 # migrate --force is safe for existing production databases and will create
-# the Forum / CustomForm tables when those modules are installed.
+# the Forum / CustomForm tables when those modules are installed. This runs
+# on EVERY boot (unlike the one-time setup below) because it needs to pick up
+# schema changes from new releases, and it is cheap/fast when there is
+# nothing pending.
 # ==============================================================================
 
 echo ""
@@ -482,62 +455,66 @@ echo "=================================================="
 php artisan migrate --force
 
 # ==============================================================================
-# FORUM SEEDER
+# ONE-TIME SETUP: ENABLE MODULES + SEED
 #
-# The Forum seeder creates the default Forum category.
-# It is run only if the forum_categories table exists.
-# The seeder itself should be written to be safe for repeated deployment.
+# modules_statuses.json in the repo does not have Forum or CustomForm marked
+# enabled, so Laravel never registers their service providers, routes, or
+# migrations on a truly fresh install -- this is why the Forum seeder
+# previously failed with "Target class
+# [Modules\Forum\Database\Seeders\ForumDatabaseSeeder] does not exist."
 #
-# We use the module seeder explicitly rather than blindly running db:seed.
-# ==============================================================================
-
-echo ""
-echo "=================================================="
-echo "FORUM DATABASE SETUP"
-echo "=================================================="
-
-php artisan db:seed --class="Modules\Forum\Database\Seeders\ForumDatabaseSeeder" --force || true
-
-# ==============================================================================
-# CUSTOMFORM SEEDER
+# This block used to run unconditionally on every boot, which meant every
+# blue-green deploy re-enabled both modules and re-ran both seeders from
+# scratch -- expensive (multiple full Laravel framework boots) and risky if
+# either seeder is not perfectly idempotent (risk of duplicate rows on every
+# deploy). It is now gated behind a marker file so it only runs once, the
+# first time a container boots against a given database/storage volume.
 #
-# Mirrors the Forum seeder pattern above. The CustomForm seeder should be
-# written to be safe for repeated deployment (e.g. idempotent permission /
-# default-record creation).
+# IMPORTANT: /var/www/html/storage/app must be mounted to a host path that
+# persists across container recreation (e.g. `-v ~/ncs-data/storage-app:
+# /var/www/html/storage/app` in the deploy script) or this marker will never
+# survive a blue-green swap and this block will re-run every deploy anyway.
 # ==============================================================================
 
-echo ""
-echo "=================================================="
-echo "CUSTOMFORM DATABASE SETUP"
-echo "=================================================="
+INSTALL_MARKER=/var/www/html/storage/app/.installed
 
-php artisan db:seed --class="Modules\CustomForm\Database\Seeders\CustomFormDatabaseSeeder" --force || true
+if [ ! -f "$INSTALL_MARKER" ]; then
+    echo ""
+    echo "=================================================="
+    echo "FIRST BOOT: ENABLING MODULES"
+    echo "=================================================="
 
-# ==============================================================================
-# ROUTES
-# ==============================================================================
+    php artisan module:enable Forum
+    php artisan module:enable CustomForm
 
-echo ""
-echo "=================================================="
-echo "STARTER26 ROUTES"
-echo "=================================================="
+    php artisan module:list || true
 
-php artisan route:list 2>/dev/null | grep -i starter26 || true
+    echo ""
+    echo "=================================================="
+    echo "FIRST BOOT: FORUM DATABASE SEED"
+    echo "=================================================="
 
-echo ""
-echo "=================================================="
-echo "FORUM ROUTES"
-echo "=================================================="
+    php artisan db:seed --class="Modules\Forum\Database\Seeders\ForumDatabaseSeeder" --force
 
-php artisan route:list 2>/dev/null | grep -i forum || true
+    echo ""
+    echo "=================================================="
+    echo "FIRST BOOT: CUSTOMFORM DATABASE SEED"
+    echo "=================================================="
 
-echo ""
-echo "=================================================="
-echo "CUSTOMFORM ROUTES"
-echo "=================================================="
+    php artisan db:seed --class="Modules\CustomForm\Database\Seeders\CustomFormDatabaseSeeder" --force
 
-php artisan route:list 2>/dev/null | grep -i custom-form || true
-php artisan route:list 2>/dev/null | grep -i customform || true
+    mkdir -p "$(dirname "$INSTALL_MARKER")"
+    date -u +"%Y-%m-%dT%H:%M:%SZ" > "$INSTALL_MARKER"
+
+    echo ""
+    echo "First-boot setup complete. Marker written to $INSTALL_MARKER."
+else
+    echo ""
+    echo "=================================================="
+    echo "MODULE SETUP: SKIPPED (already installed)"
+    echo "=================================================="
+    echo "Marker found at $INSTALL_MARKER ($(cat "$INSTALL_MARKER" 2>/dev/null || echo unknown))"
+fi
 
 # ==============================================================================
 # CONFIG CACHE
