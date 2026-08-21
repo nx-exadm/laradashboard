@@ -55,11 +55,20 @@ RUN test -f /app/modules/Starter26/module.json && test -f /app/modules/Forum/mod
 # Module composer.json files (including CustomForm's) are merged into the
 # root autoloader here, so modules must already be extracted into /app/modules
 # before this step runs -- they are (see steps above).
+#
+# --no-dev is REQUIRED here. Without it, every package under require-dev in
+# composer.json (laravel/boost, larastan, laravel/pint, laravel/sail,
+# brianium/paratest, etc.) ships into the production image. laravel/boost in
+# particular registers an InjectBoost middleware that injects a browser-side
+# logging script into every HTTP response and POSTs console output back to
+# /_boost/browser-logs -- meant strictly for local development with AI coding
+# tools, never for production. Confirmed this was happening in production
+# before this fix was added.
 # ==============================================================================
 
 COPY --from=composer:2.7 /usr/bin/composer /usr/local/bin/composer
 
-RUN composer install --no-interaction --prefer-dist --optimize-autoloader --ignore-platform-reqs
+RUN composer install --no-interaction --prefer-dist --optimize-autoloader --ignore-platform-reqs --no-dev
 
 RUN composer dump-autoload --optimize --no-interaction
 
