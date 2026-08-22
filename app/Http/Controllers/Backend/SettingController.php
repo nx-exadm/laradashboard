@@ -17,6 +17,7 @@ use App\Support\Facades\Hook;
 use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SettingController extends Controller
 {
@@ -158,5 +159,119 @@ class SettingController extends Controller
             'success' => true,
             'message' => __('Image removed successfully.'),
         ]);
+    }
+
+    /**
+     * Display database size, disk usage, table stats, and connection health.
+     */
+    public function database(): Renderable
+    {
+        $this->authorize('manage', Setting::class);
+
+        $connection = config('database.default');
+        $dbConfig = config("database.connections.{$connection}");
+
+        $databaseInfo = [
+            'driver' => $connection,
+            'size_bytes' => 0,
+            'size_formatted' => '0 B',
+            'tables_count' => 0,
+            'total_rows' => 0,
+            'tables' => [],
+        ];
+
+        if ($connection === 'sqlite') {
+            $dbPath = $dbConfig['database'] ?? '';
+
+            if ($dbPath !== '' && file_exists($dbPath)) {
+                $databaseInfo['size_bytes'] = filesize($dbPath);
+            }
+
+            $tables = DB::select(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            );
+            $tableNames = array_map(static fn ($table) => $table->name, $tables);
+        } else {
+            $databaseName = $dbConfig['database'] ?? '';
+
+            $sizeResult = DB::select('
+                SELECT SUM(data_length + index_length) AS size
+                FROM information_schema.TABLES
+                WHERE table_schema = ?
+            ', [$databaseName]);
+
+            $databaseInfo['size_bytes'] = (int) ($sizeResult[0]->size ?? 0);
+
+            $tables = DB::select('SHOW TABLES');
+            $tableNames = array_map(static fn ($table) => array_values((array) $table)[0], $tables);
+        }
+
+        $databaseInfo['size_formatted'] = $this->formatBytes($databaseInfo['size_bytes']);
+
+        $tableStats = [];
+        $totalRows = 0;
+
+        foreach ($tableNames as $tableName) {
+            try {
+                $rowCount = DB::table($tableName)->count();
+            } catch (\Throwable $e) {
+                $rowCount = 0;
+            }
+
+            $tableStats[] = ['name' => $tableName, 'rows' => $rowCount];
+            $totalRows += $rowCount;
+        }
+
+        usort($tableStats, static fn ($a, $b) => $b['rows'] <=> $a['rows']);
+
+        $databaseInfo['tables_count'] = count($tableStats);
+        $databaseInfo['total_rows'] = $totalRows;
+        $databaseInfo['tables'] = $tableStats;
+
+        // Disk space for the partition hosting storage/app (database + media files live here)
+        $diskPath = storage_path('app');
+        $diskTotal = disk_total_space($diskPath) ?: 0;
+        $diskFree = disk_free_space($diskPath) ?: 0;
+        $diskUsed = $diskTotal - $diskFree;
+
+        $diskInfo = [
+            'total_bytes' => $diskTotal,
+            'used_bytes' => $diskUsed,
+            'free_bytes' => $diskFree,
+            'total_formatted' => $this->formatBytes($diskTotal),
+            'used_formatted' => $this->formatBytes($diskUsed),
+            'free_formatted' => $this->formatBytes($diskFree),
+            'used_percent' => $diskTotal > 0 ? round(($diskUsed / $diskTotal) * 100, 1) : 0.0,
+        ];
+
+        // Simple round-trip query timing to gauge responsiveness
+        $start = microtime(true);
+        DB::select('SELECT 1');
+        $queryTimeMs = round((microtime(true) - $start) * 1000, 2);
+
+        $this->setBreadcrumbTitle(__('Database Info'))
+            ->setBreadcrumbIcon('lucide:database');
+
+        return $this->renderViewWithBreadcrumbs('backend.pages.settings.database-info', compact(
+            'databaseInfo',
+            'diskInfo',
+            'queryTimeMs',
+        ));
+    }
+
+    /**
+     * Format a byte count into a human-readable string (e.g. "12.4 MB").
+     */
+    private function formatBytes(int $bytes, int $precision = 2): string
+    {
+        if ($bytes <= 0) {
+            return '0 B';
+        }
+
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        $pow = min((int) floor(log($bytes) / log(1024)), count($units) - 1);
+        $bytes /= (1 << (10 * $pow));
+
+        return round($bytes, $precision) . ' ' . $units[$pow];
     }
 }
