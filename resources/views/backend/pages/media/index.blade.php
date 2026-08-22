@@ -1,4 +1,3 @@
-
 <div
     x-data="{
         selectedMedia: [],
@@ -27,7 +26,7 @@
 
                         this.$nextTick(() => {
                             const lastId = uploadedIds[uploadedIds.length - 1];
-                            const target = document.querySelector(`[data-media-id="${lastId}"]`);
+                            const target = document.querySelector(`[data-media-id='${lastId}']`);
                             target?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                         });
                     }
