@@ -110,6 +110,13 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.', 'middleware' => ['auth', 'v
         Route::post('/', [SettingController::class, 'store'])->name('settings.store');
         Route::delete('/remove-image', [SettingController::class, 'removeImage'])->name('settings.remove-image');
 
+        // Database Info Route — displays DB size, disk usage, table stats,
+        // and connection health. Placed above the {tab?} settings.index
+        // route pattern isn't an issue here since it's a distinct static
+        // segment, not a wildcard, but kept near the other core settings
+        // routes for discoverability.
+        Route::get('/database', [SettingController::class, 'database'])->name('settings.database');
+
         // Email Settings Management Routes.
         Route::get('emails', [EmailSettingController::class, 'index'])->name('email-settings.index');
         Route::post('emails', [EmailSettingController::class, 'update'])->name('email-settings.update');
